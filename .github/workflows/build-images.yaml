@@ -70,8 +70,8 @@ jobs:
             --opt "filename=${DOCKERFILE}" \
             --opt platform=linux/amd64 \
             --no-cache \
-            --attest type=provenance,mode=max \
-            --attest type=sbom \
+            --opt attest:provenance=mode=max \
+            --opt attest:sbom= \
             --metadata-file "${metadata}" \
             --output "type=image,name=${IMAGE}:${tag},push=true,oci-mediatypes=true"
 
