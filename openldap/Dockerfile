@@ -17,8 +17,8 @@ RUN apt-get update \
     && curl --fail --show-error --location \
         --output /tmp/openldap.tgz \
         "https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-${OPENLDAP_VERSION}.tgz" \
-    && printf '%s  %s\n' "${OPENLDAP_SHA3_512}" /tmp/openldap.tgz \
-        | sha3sum --algorithm 512 --check - \
+    && test "$(openssl dgst -sha3-512 /tmp/openldap.tgz | awk '{print $2}')" \
+        = "${OPENLDAP_SHA3_512}" \
     && tar --extract --gzip --file /tmp/openldap.tgz --directory /tmp \
     && cd "/tmp/openldap-${OPENLDAP_VERSION}" \
     && ./configure \
