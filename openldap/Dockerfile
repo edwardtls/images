@@ -71,6 +71,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/openldap /opt/openldap
+COPY --from=builder /etc/openldap/openldap/schema /opt/openldap/etc/schema
 
 ENV PATH="/opt/openldap/bin:/opt/openldap/sbin:${PATH}"
 
