@@ -8,6 +8,7 @@ RUN apt-get update \
         build-essential \
         ca-certificates \
         curl \
+        groff-base \
         libargon2-dev \
         libevent-dev \
         libltdl-dev \
