@@ -35,3 +35,13 @@ docker push edwardtls1/pg-backup:latest
 
 See [`backup-image/README.md`](backup-image/README.md) for image-specific
 details.
+
+## OpenLDAP image
+
+`openldap/` builds OpenLDAP 2.6.15 LTS directly from the checksum-verified
+upstream source release. It is a non-root runtime containing the modules used
+by the replicated Kubernetes directory. The image is published to the
+internal Harbor project as `harbor.apps.d00s.org/d00s/openldap` and Kubernetes
+pins its immutable digest.
+
+See [`openldap/README.md`](openldap/README.md) for build details.
