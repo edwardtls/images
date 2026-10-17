@@ -39,7 +39,11 @@ RUN apt-get update \
     && make --jobs="$(nproc)" \
     && make install \
     && /opt/openldap/libexec/slapd -VV \
-    && /opt/openldap/sbin/slappasswd -h '{ARGON2}' -s image-build-check >/dev/null
+    && /opt/openldap/sbin/slappasswd \
+        -o module-path=/opt/openldap/libexec/openldap \
+        -o module-load=argon2 \
+        -h '{ARGON2}' \
+        -s image-build-check >/dev/null
 
 FROM debian:13-slim
 
