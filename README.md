@@ -5,7 +5,7 @@ cluster.
 
 ## PostgreSQL backup image
 
-`backup-image/` builds `edwardtls1/pg-backup`. It is based on PostgreSQL 18.6
+`backup-image/` builds `harbor.apps.d00s.org/d00s/pg-backup`. It is based on PostgreSQL 18.6
 and adds the AWS CLI and boto3.
 
 The Argo CD-managed backup CronJobs use the image twice:
@@ -19,19 +19,16 @@ Backups are stored in the MinIO bucket `postgres-backup` using separate
 prefixes. Database and MinIO credentials are supplied by Kubernetes Secrets;
 they are not included in the image.
 
-Kubernetes manifests use an immutable image tag and digest. After changing the
-image, build and push a new version from a Docker-authenticated host, then
-update the tag and digest in the d00s GitOps repository:
+Kubernetes manifests use an immutable image tag and digest. GitHub Actions
+builds both images on relevant pushes, every Sunday, and on manual dispatch.
+Each job runs on an ephemeral Kubernetes runner and pushes directly to Harbor.
+The runner scales back to zero when the job is complete.
 
-```sh
-cd backup-image
-docker build \
-  -t edwardtls1/pg-backup:18.6-1 \
-  -t edwardtls1/pg-backup:latest \
-  .
-docker push edwardtls1/pg-backup:18.6-1
-docker push edwardtls1/pg-backup:latest
-```
+Builds use rootless BuildKit without a privileged Docker daemon. They publish
+an immutable date, Git commit, and run-number tag together with SBOM and SLSA
+provenance attestations. Harbor automatically scans every pushed artifact.
+Copy the reported `tag@digest` from the workflow summary into the d00s GitOps
+manifest to promote a build; no mutable `latest` tag is deployed.
 
 See [`backup-image/README.md`](backup-image/README.md) for image-specific
 details.
@@ -43,5 +40,9 @@ upstream source release. It is a non-root runtime containing the modules used
 by the replicated Kubernetes directory. The image is published to the
 internal Harbor project as `harbor.apps.d00s.org/d00s/openldap` and Kubernetes
 pins its immutable digest.
+
+The workflow has no `pull_request` trigger because this repository is public
+and a self-hosted runner must not execute untrusted fork code. Only trusted
+pushes to `main`, schedules, and manual dispatches can start it.
 
 See [`openldap/README.md`](openldap/README.md) for build details.

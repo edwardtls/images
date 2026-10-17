@@ -1,0 +1,87 @@
+name: Build custom images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-images.yaml
+      - backup-image/**
+      - openldap/**
+  schedule:
+    - cron: "17 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: custom-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # This is deliberately not triggered by pull_request. The repository is
+    # public and this runner has a short-lived mount of a Harbor push token.
+    runs-on: arc-images
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - name: openldap
+            context: openldap
+            dockerfile: Dockerfile
+            version: 2.6.15
+            image: harbor.apps.d00s.org/d00s/openldap
+          - name: pg-backup
+            context: backup-image
+            dockerfile: Dockerfile
+            version: 18.6
+            image: harbor.apps.d00s.org/d00s/pg-backup
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build and push to Harbor
+        id: build
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+          VERSION: ${{ matrix.version }}
+          CONTEXT: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+        run: |
+          set -euo pipefail
+
+          short_sha="${GITHUB_SHA:0:12}"
+          build_date="$(date -u +%Y%m%d)"
+          tag="${VERSION}-${build_date}-${short_sha}-${GITHUB_RUN_NUMBER}"
+          metadata="${RUNNER_TEMP}/${{ matrix.name }}-metadata.json"
+
+          /opt/buildkit/bin/buildctl build \
+            --frontend dockerfile.v0 \
+            --local "context=${CONTEXT}" \
+            --local "dockerfile=${CONTEXT}" \
+            --opt "filename=${DOCKERFILE}" \
+            --opt platform=linux/amd64 \
+            --no-cache \
+            --attest type=provenance,mode=max \
+            --attest type=sbom \
+            --metadata-file "${metadata}" \
+            --output "type=image,name=${IMAGE}:${tag},push=true,oci-mediatypes=true"
+
+          digest="$(jq -er '."containerimage.digest"' "${metadata}")"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### ${{ matrix.name }}"
+            echo
+            echo "\`${IMAGE}:${tag}@${digest}\`"
+            echo
+            echo "Harbor automatically queued a vulnerability scan after the push."
+          } >> "${GITHUB_STEP_SUMMARY}"
