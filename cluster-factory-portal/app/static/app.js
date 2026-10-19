@@ -1,0 +1,5 @@
+document.querySelectorAll('[data-dialog]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.dialog).showModal()));
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));
+document.querySelectorAll('[data-confirm]').forEach(f=>f.addEventListener('submit',e=>{if(!confirm(f.dataset.confirm))e.preventDefault()}));
+const log=document.getElementById('log');
+if(log){const source=new EventSource(`/api/jobs/${log.dataset.job}/stream`);source.addEventListener('log',e=>{const line=JSON.parse(e.data);log.textContent+=line+'\n';log.scrollTop=log.scrollHeight});source.addEventListener('stage',e=>{const line=JSON.parse(e.data);document.getElementById('stage').textContent=line.replace(/^.*FACTORY_STAGE\s+/, '').replaceAll('-',' ');log.textContent+=line+'\n'});source.addEventListener('done',()=>{document.getElementById('job-state').textContent='Finished';source.close();setTimeout(()=>location.reload(),1500)});source.onerror=()=>{document.getElementById('job-state').textContent='Reconnecting…'}}

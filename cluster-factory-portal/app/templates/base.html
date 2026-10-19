@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Cluster Factory{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/clusters"><span class="brand-mark">d0</span><span>Cluster Factory</span></a>
+    {% if user %}<nav><a href="/clusters">Clusters</a><a href="/build">New build</a><a href="/howto">How it works</a>{% if admin %}<a href="/admin">Admin</a>{% endif %}</nav>
+    <div class="identity"><span>{{ user.preferred_username }}</span><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Sign out</button></form></div>{% endif %}
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  {% if user %}<footer><button class="link" data-dialog="contact-dialog">Contact administrator</button><span>No email address is disclosed.</span></footer>
+  <dialog id="contact-dialog"><form method="post" action="/contact"><input type="hidden" name="csrf" value="{{ csrf }}"><h2>Contact administrator</h2><p>Include the cluster or job name and what you expected to happen.</p><textarea name="message" minlength="10" maxlength="4000" required></textarea><div class="actions"><button type="button" class="secondary" data-close>Cancel</button><button>Send securely</button></div></form></dialog>{% endif %}
+  <script src="/static/app.js" defer></script>
+</body></html>

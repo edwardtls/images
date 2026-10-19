@@ -46,3 +46,14 @@ and a self-hosted runner must not execute untrusted fork code. Only trusted
 pushes to `main`, schedules, and manual dispatches can start it.
 
 See [`openldap/README.md`](openldap/README.md) for build details.
+
+## Cluster Factory Portal
+
+`cluster-factory-portal/` provides the Keycloak-authenticated web portal,
+short-lived Ansible trigger, and read-only inventory observer for disposable
+clusters. The web process contains no Proxmox credentials or disposable
+cluster kubeconfigs. Build/delete work runs as audited Kubernetes Jobs and
+calls the existing playbooks on Atlantis over the restricted factory SSH key.
+
+The same immutable image is used for the web, runner, and observer roles. The
+GitOps deployment pins a promoted `tag@digest`; no mutable tag is deployed.
