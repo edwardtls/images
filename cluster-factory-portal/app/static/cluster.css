@@ -1,0 +1,5 @@
+.facts div{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.facts dd{font-weight:750}
+.config{max-height:320px;overflow:auto;background:#edf0ed;padding:14px;font-size:11px}
+.card h2 a{text-decoration:none}
+.card h2 a:hover{text-decoration:underline}

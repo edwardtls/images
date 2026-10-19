@@ -134,6 +134,16 @@ def build_form(request: Request):
         request, profiles=kube.profiles(), versions=kube.versions(), quota=kube.quota_for(user)))
 
 
+@app.get("/clusters/{profile}", response_class=HTMLResponse)
+def cluster_detail(profile: str, request: Request):
+    user = current_user(request)
+    record = next((item for item in visible_records(user) if item["profile"] == profile), None)
+    live = kube.inventory().get("clusters", {}).get(profile)
+    if not record or not live:
+        raise HTTPException(404, "Cluster not found")
+    return templates.TemplateResponse("cluster.html", context(request, cluster=record, live=live))
+
+
 @app.post("/build")
 async def build(request: Request):
     user = current_user(request)
