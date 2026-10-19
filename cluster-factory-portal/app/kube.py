@@ -259,6 +259,8 @@ def dispatch_pending() -> None:
                                          "completed_at": dt.datetime.now(dt.timezone.utc).isoformat()})
                 except KubeError:
                     pass
+            api("DELETE", ns_path("configmaps", metadata["name"]),
+                {"apiVersion": "v1", "kind": "DeleteOptions"})
 
 
 def job_for(job_id: str) -> dict:
