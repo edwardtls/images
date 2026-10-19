@@ -29,7 +29,7 @@ keycloak = oauth.register(
     "keycloak", client_id=os.environ["OIDC_CLIENT_ID"],
     client_secret=os.environ["OIDC_CLIENT_SECRET"],
     server_metadata_url=os.environ["OIDC_DISCOVERY_URL"],
-    client_kwargs={"scope": "openid profile email groups"})
+    client_kwargs={"scope": "openid profile email groups", "code_challenge_method": "S256"})
 
 
 @app.before_request
