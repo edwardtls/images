@@ -231,7 +231,7 @@ def delete_cluster(profile: str):
 def job_page(job_id: str):
     user = current_user()
     try:
-        job = kube.job_for(job_id)
+        job = kube.operation_for(job_id)
     except KeyError:
         abort(404, "Job not found")
     if not is_admin(user) and job["metadata"]["labels"].get("factory.d00s.org/owner") != owner_id(user):
@@ -243,11 +243,14 @@ def job_page(job_id: str):
 def job_stream(job_id: str):
     user = current_user()
     try:
-        job = kube.job_for(job_id)
+        job = kube.operation_for(job_id)
     except KeyError:
         abort(404, "Job not found")
     if not is_admin(user) and job["metadata"]["labels"].get("factory.d00s.org/owner") != owner_id(user):
         abort(403, "This job belongs to another user")
+    if job.get("kind") == "PendingFactoryRequest":
+        return Response('event: stage\ndata: "queued"\n\n', mimetype="text/event-stream",
+                        headers={"Retry-After": "2"})
     pods = kube.pods_for_job(job["metadata"]["name"])
     if not pods:
         return Response('event: stage\ndata: "queued"\n\n', mimetype="text/event-stream")

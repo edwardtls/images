@@ -19,6 +19,7 @@ WORKER_IMAGE = os.environ["WORKER_IMAGE"]
 SSH_SECRET = os.getenv("SSH_SECRET", "cluster-factory-portal-ssh")
 SSH_CONFIG = os.getenv("SSH_CONFIG", "cluster-factory-expiry-ssh")
 TTL_RE = re.compile(r"^[1-9][0-9]*[hdw]$")
+JOB_ID_RE = re.compile(r"^[a-f0-9]{12}$")
 API = f"https://{os.environ.get('KUBERNETES_SERVICE_HOST', 'kubernetes.default.svc')}:{os.environ.get('KUBERNETES_SERVICE_PORT_HTTPS', '443')}"
 TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
@@ -99,7 +100,13 @@ def terminal(job: dict) -> bool:
 def active_jobs() -> list[dict]:
     jobs = api("GET", ns_path("jobs", group="apis/batch/v1"),
                query={"labelSelector": "app.kubernetes.io/name=cluster-factory-job"}).get("items", [])
-    return [job for job in jobs if not terminal(job)]
+    active = [job for job in jobs if not terminal(job)]
+    known = {job["metadata"]["labels"]["factory.d00s.org/job-id"] for job in jobs}
+    for request_cm in labels("factory.d00s.org/type=request"):
+        job_id = request_cm["metadata"]["labels"].get("factory.d00s.org/job-id")
+        if job_id and job_id not in known:
+            active.append(pending_operation(request_cm))
+    return active
 
 
 def cluster_records() -> list[dict]:
@@ -162,19 +169,51 @@ def submit(action: str, request_data: dict, user: dict, source_ip: str) -> str:
     profile = request_data["profile"]; job_id = uuid.uuid4().hex[:12]; claim_profile(profile, job_id)
     try:
         spec_name = f"factory-request-{job_id}"; owner = hashlib.sha256(user["sub"].encode()).hexdigest()[:20]
-        api("POST", ns_path("configmaps"), {"apiVersion": "v1", "kind": "ConfigMap",
-            "metadata": {"name": spec_name, "namespace": NAMESPACE,
-                         "labels": {"factory.d00s.org/type": "request"}},
-            "data": {"request.yaml": yaml.safe_dump({"cluster_request": request_data}, sort_keys=False)}})
         job_name = f"factory-{action}-{job_id}"
         audit(job_id, {"schema": 1, "job_id": job_id, "job_name": job_name, "action": action,
                        "profile": profile, "owner_sub": user["sub"], "owner": user.get("preferred_username"),
                        "source_ip": source_ip, "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(),
                        "status": "submitted", "request": request_data})
-        labels_map = {"app.kubernetes.io/name": "cluster-factory-job", "factory.d00s.org/action": action,
+        labels_map = {"factory.d00s.org/type": "request", "factory.d00s.org/action": action,
                       "factory.d00s.org/profile": profile, "factory.d00s.org/owner": owner,
                       "factory.d00s.org/job-id": job_id}
-        container = {"name": "runner", "image": WORKER_IMAGE, "imagePullPolicy": "IfNotPresent",
+        api("POST", ns_path("configmaps"), {"apiVersion": "v1", "kind": "ConfigMap",
+            "metadata": {"name": spec_name, "namespace": NAMESPACE, "labels": labels_map,
+                         "annotations": {"factory.d00s.org/owner-name": user.get("preferred_username", "unknown")}},
+            "data": {"request.yaml": yaml.safe_dump({"cluster_request": request_data}, sort_keys=False)}})
+        return job_id
+    except Exception:
+        release_profile(profile); raise
+
+
+def pending_operation(configmap: dict) -> dict:
+    labels_map = dict(configmap["metadata"].get("labels", {}))
+    labels_map["app.kubernetes.io/name"] = "cluster-factory-job"
+    return {"apiVersion": "factory.d00s.org/v1", "kind": "PendingFactoryRequest",
+            "metadata": {"name": configmap["metadata"]["name"], "labels": labels_map}, "status": {}}
+
+
+def dispatch_pending() -> None:
+    for request_cm in labels("factory.d00s.org/type=request"):
+        metadata = request_cm["metadata"]
+        if metadata.get("annotations", {}).get("factory.d00s.org/dispatched-at"):
+            continue
+        labels_map = metadata.get("labels", {})
+        job_id = labels_map.get("factory.d00s.org/job-id", "")
+        action = labels_map.get("factory.d00s.org/action", "")
+        profile = labels_map.get("factory.d00s.org/profile", "")
+        try:
+            if not JOB_ID_RE.fullmatch(job_id) or action not in {"create", "delete"} or profile not in profiles():
+                raise ValueError("unsafe request metadata")
+            document = yaml.safe_load(request_cm["data"]["request.yaml"])
+            request_data = document["cluster_request"]
+            if request_data.get("profile") != profile or request_data.get("name") != profile:
+                raise ValueError("request profile mismatch")
+            job_labels = {"app.kubernetes.io/name": "cluster-factory-job",
+                          "factory.d00s.org/action": action, "factory.d00s.org/profile": profile,
+                          "factory.d00s.org/owner": labels_map["factory.d00s.org/owner"],
+                          "factory.d00s.org/job-id": job_id}
+            container = {"name": "runner", "image": WORKER_IMAGE, "imagePullPolicy": "IfNotPresent",
             "command": ["python3", "-m", "app.job_runner"],
             "env": [{"name": "FACTORY_ACTION", "value": action}, {"name": "FACTORY_JOB_ID", "value": job_id},
                     {"name": "FACTORY_PROFILE", "value": profile},
@@ -187,23 +226,39 @@ def submit(action: str, request_data: dict, user: dict, source_ip: str) -> str:
                              {"name": "ssh-key", "mountPath": "/ssh", "readOnly": True},
                              {"name": "ssh-config", "mountPath": "/ssh-config", "readOnly": True},
                              {"name": "tmp", "mountPath": "/tmp"}]}
-        pod_spec = {"serviceAccountName": "cluster-factory-runner", "automountServiceAccountToken": False,
+            pod_spec = {"serviceAccountName": "cluster-factory-runner", "automountServiceAccountToken": False,
             "restartPolicy": "Never", "imagePullSecrets": [{"name": "cluster-factory-portal-harbor"}],
             "securityContext": {"runAsNonRoot": True, "runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532,
                                 "seccompProfile": {"type": "RuntimeDefault"}}, "containers": [container],
-            "volumes": [{"name": "request", "configMap": {"name": spec_name, "defaultMode": 256}},
+            "volumes": [{"name": "request", "configMap": {"name": metadata["name"], "defaultMode": 256}},
                         {"name": "ssh-key", "secret": {"secretName": SSH_SECRET, "defaultMode": 256}},
                         {"name": "ssh-config", "configMap": {"name": SSH_CONFIG, "defaultMode": 292}},
                         {"name": "tmp", "emptyDir": {"sizeLimit": "64Mi"}}]}
-        job = {"apiVersion": "batch/v1", "kind": "Job",
-            "metadata": {"name": job_name, "namespace": NAMESPACE, "labels": labels_map,
-                         "annotations": {"factory.d00s.org/owner-name": user.get("preferred_username", "unknown")}},
+            job = {"apiVersion": "batch/v1", "kind": "Job",
+            "metadata": {"name": f"factory-{action}-{job_id}", "namespace": NAMESPACE, "labels": job_labels,
+                         "annotations": {"factory.d00s.org/owner-name": metadata.get("annotations", {}).get(
+                             "factory.d00s.org/owner-name", "unknown")}},
             "spec": {"backoffLimit": 0, "activeDeadlineSeconds": 10800, "ttlSecondsAfterFinished": 604800,
-                     "template": {"metadata": {"labels": labels_map}, "spec": pod_spec}}}
-        api("POST", ns_path("jobs", group="apis/batch/v1"), job)
-        return job_id
-    except Exception:
-        release_profile(profile); raise
+                     "template": {"metadata": {"labels": job_labels}, "spec": pod_spec}}}
+            try:
+                api("POST", ns_path("jobs", group="apis/batch/v1"), job)
+            except KubeError as exc:
+                if exc.status != 409:
+                    raise
+            api("PATCH", ns_path("configmaps", metadata["name"]),
+                {"metadata": {"annotations": {"factory.d00s.org/dispatched-at":
+                    dt.datetime.now(dt.timezone.utc).isoformat()}}}, content_type="application/merge-patch+json")
+        except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
+            api("PATCH", ns_path("configmaps", metadata["name"]),
+                {"metadata": {"annotations": {"factory.d00s.org/dispatch-error": str(exc)[:200]}}},
+                content_type="application/merge-patch+json")
+            release_profile(profile)
+            if JOB_ID_RE.fullmatch(job_id):
+                try:
+                    patch_audit(job_id, {"status": "rejected", "reconciled": True,
+                                         "completed_at": dt.datetime.now(dt.timezone.utc).isoformat()})
+                except KubeError:
+                    pass
 
 
 def job_for(job_id: str) -> dict:
@@ -212,6 +267,18 @@ def job_for(job_id: str) -> dict:
     if not items:
         raise KeyError(job_id)
     return items[0]
+
+
+def operation_for(job_id: str) -> dict:
+    try:
+        return job_for(job_id)
+    except KeyError:
+        try:
+            return pending_operation(api("GET", ns_path("configmaps", f"factory-request-{job_id}")))
+        except KubeError as exc:
+            if exc.status == 404:
+                raise KeyError(job_id) from exc
+            raise
 
 
 def pods_for_job(name: str) -> list[dict]:
@@ -267,6 +334,12 @@ def reconcile() -> None:
                 except KubeError as exc:
                     if exc.status != 404: raise
         release_profile(profile); patch_audit(job_id, {"reconciled": True})
+        try:
+            api("DELETE", ns_path("configmaps", f"factory-request-{job_id}"),
+                {"apiVersion": "v1", "kind": "DeleteOptions"})
+        except KubeError as exc:
+            if exc.status != 404:
+                raise
 
 
 def update_policy(payload: dict) -> None:
