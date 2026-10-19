@@ -180,12 +180,12 @@ def submit(action: str, request_data: dict, user: dict, source_ip: str) -> str:
                 annotations={"factory.d00s.org/owner-name": user.get("preferred_username", "unknown")}),
             spec=client.V1JobSpec(backoff_limit=0, active_deadline_seconds=10800,
                                   ttl_seconds_after_finished=604800, template=pod))
-        batch.create_namespaced_job(NAMESPACE, job)
         audit(job_id, {"schema": 1, "job_id": job_id, "job_name": job_name, "action": action,
                        "profile": profile, "owner_sub": user["sub"],
                        "owner": user.get("preferred_username"), "source_ip": source_ip,
                        "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(), "status": "submitted",
                        "request": request_data})
+        batch.create_namespaced_job(NAMESPACE, job)
         return job_id
     except Exception:
         release_profile(profile)

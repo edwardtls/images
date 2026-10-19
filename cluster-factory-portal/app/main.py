@@ -106,7 +106,7 @@ async def callback(request: Request):
     if not ({os.getenv("OIDC_USER_GROUP", "factory-users"), os.getenv("OIDC_ADMIN_GROUP", "factory-admins")} & groups(user)):
         raise HTTPException(status_code=403, detail="Your account has not been granted factory access")
     request.session.clear()
-    request.session["user"] = {key: user.get(key) for key in ("sub", "preferred_username", "name", "email", "groups")}
+    request.session["user"] = {key: user.get(key) for key in ("sub", "preferred_username", "groups")}
     csrf_token(request)
     return RedirectResponse("/clusters", status_code=303)
 
@@ -170,6 +170,11 @@ async def build(request: Request):
     ttl = str(form.get("ttl", "24h"))
     if not kube.TTL_RE.fullmatch(ttl):
         raise HTTPException(400, "TTL must look like 24h, 7d, or 2w")
+    ttl_hours = int(ttl[:-1]) * {"h": 1, "d": 24, "w": 168}[ttl[-1]]
+    regular_max = str(kube.policy().get("max_ttl_regular", "7d"))
+    regular_max_hours = int(regular_max[:-1]) * {"h": 1, "d": 24, "w": 168}[regular_max[-1]]
+    if not is_admin(user) and ttl_hours > regular_max_hours:
+        raise HTTPException(400, f"Regular-user TTL is limited to {regular_max}")
     request_data = {
         "name": profile, "profile": profile,
         "kubernetes_version": selected_versions.pop("kubernetes"),
@@ -230,7 +235,7 @@ def job_stream(job_id: str, request: Request):
     pods = kube.core.list_namespaced_pod(kube.NAMESPACE, label_selector=f"job-name={job.metadata.name}").items
     if not pods:
         async def waiting():
-            yield "event: stage\ndata: queued\n\n"
+            yield 'event: stage\ndata: "queued"\n\n'
         return StreamingResponse(waiting(), media_type="text/event-stream")
     pod = pods[0].metadata.name
 
