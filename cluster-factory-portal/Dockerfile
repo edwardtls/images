@@ -1,6 +1,18 @@
-FROM python:3.13.9-alpine3.22@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413f31026c3856e5911618b1
+FROM python:3.13.9-alpine3.22@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413f31026c3856e5911618b1 AS audit
+
+WORKDIR /audit
+COPY requirements.txt /audit/requirements.txt
+RUN pip install --no-cache-dir pip-audit==2.9.0 \
+    && pip-audit --requirement /audit/requirements.txt \
+    && touch /audit/passed
+
+FROM python:3.13.9-alpine3.22@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413f31026c3856e5911618b1 AS runtime
+
+COPY --from=audit /audit/passed /audit-passed
 
 RUN apk add --no-cache openssh-client ca-certificates tini \
+    && test -f /audit-passed \
+    && rm /audit-passed \
     && addgroup -g 65532 portal \
     && adduser -D -u 65532 -G portal -h /app portal
 

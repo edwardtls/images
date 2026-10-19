@@ -53,17 +53,6 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Audit portal Python dependencies
-        if: matrix.name == 'cluster-factory-portal'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m compileall -q cluster-factory-portal/app
-          python3 -m pip install --disable-pip-version-check --quiet \
-            --target "${RUNNER_TEMP}/portal-audit" pip-audit==2.9.0
-          PYTHONPATH="${RUNNER_TEMP}/portal-audit" python3 -m pip_audit \
-            --requirement cluster-factory-portal/requirements.txt
-
       - name: Build and push to Harbor
         id: build
         shell: bash
