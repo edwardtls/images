@@ -208,6 +208,10 @@ def reconcile() -> None:
         action = job.metadata.labels["factory.d00s.org/action"]
         succeeded = bool(job.status.succeeded)
         try:
+            audit_cm = core.read_namespaced_config_map(f"factory-audit-{job_id}", NAMESPACE)
+            existing_audit = json.loads(audit_cm.data["record.json"])
+            if existing_audit.get("reconciled"):
+                continue
             patch_audit(job_id, {"status": "succeeded" if succeeded else "failed",
                                  "completed_at": dt.datetime.now(dt.timezone.utc).isoformat()})
         except ApiException:
@@ -242,6 +246,10 @@ def reconcile() -> None:
                     if exc.status != 404:
                         raise
         release_profile(profile)
+        try:
+            patch_audit(job_id, {"reconciled": True})
+        except ApiException:
+            pass
 
 
 def update_policy(payload: dict) -> None:

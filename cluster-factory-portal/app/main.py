@@ -36,6 +36,18 @@ oauth.register("keycloak", client_id=os.environ["OIDC_CLIENT_ID"],
                client_kwargs={"scope": "openid profile email groups"})
 
 
+@app.on_event("startup")
+async def start_reconciler():
+    async def loop():
+        while True:
+            try:
+                await asyncio.to_thread(kube.reconcile)
+            except Exception:
+                pass
+            await asyncio.sleep(15)
+    asyncio.create_task(loop())
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -55,6 +67,19 @@ def context(request: Request, **extra):
     user = request.session.get("user")
     return {"request": request, "user": user, "admin": bool(user and is_admin(user)),
             "csrf": csrf_token(request), **extra}
+
+
+def visible_records(user: dict) -> list[dict]:
+    records = kube.cluster_records()
+    if is_admin(user):
+        known = {record["profile"] for record in records}
+        for profile, live in kube.inventory().get("clusters", {}).items():
+            if profile not in known:
+                records.append({"profile": profile, "owner": "factory-system", "owner_sub": "",
+                                "created_at": "", "expires_at": live.get("expires_at") or "",
+                                "url": live.get("url", "#"), "request": {}, "managed_by_portal": False})
+        return records
+    return [record for record in records if record.get("owner_sub") == user["sub"]]
 
 
 @app.get("/healthz")
@@ -97,9 +122,7 @@ def logout(request: Request, csrf: str = Form(...)):
 def clusters(request: Request):
     user = current_user(request)
     kube.reconcile()
-    records = kube.cluster_records()
-    if not is_admin(user):
-        records = [record for record in records if record.get("owner_sub") == user["sub"]]
+    records = visible_records(user)
     return templates.TemplateResponse("clusters.html", context(
         request, clusters=records, inventory=kube.inventory(), jobs=kube.active_jobs(), quota=kube.quota_for(user)))
 
@@ -124,7 +147,8 @@ async def build(request: Request):
     pending = [job for job in kube.active_jobs() if job.metadata.labels.get("factory.d00s.org/owner") == owner_id(user)]
     if not is_admin(user) and len(owned) + len(pending) >= kube.quota_for(user):
         raise HTTPException(409, "Your active cluster quota has been reached")
-    if any(record["profile"] == profile for record in kube.cluster_records()):
+    if (any(record["profile"] == profile for record in kube.cluster_records())
+            or profile in kube.inventory().get("clusters", {})):
         raise HTTPException(409, "This profile already has an active cluster")
     version_catalog = kube.versions()
     selected_versions = {}
@@ -254,7 +278,7 @@ def admin(request: Request):
     audits.sort(key=lambda item: item.get("submitted_at", ""), reverse=True)
     blocks = kube.read_json_configmap("cluster-factory-security-status", "blocks.json", {"active": [], "history": []})
     return templates.TemplateResponse("admin.html", context(
-        request, clusters=kube.cluster_records(), audits=audits[:100], policy=kube.policy(),
+        request, clusters=visible_records(request.session["user"]), audits=audits[:100], policy=kube.policy(),
         inventory=kube.inventory(), blocks=blocks))
 
 
