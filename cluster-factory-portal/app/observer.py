@@ -12,8 +12,7 @@ def main() -> int:
     ssh = ["ssh", "-p", "2200", "-i", "/ssh/id_ed25519", "-o", "BatchMode=yes",
            "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
            "-o", "UserKnownHostsFile=/ssh-config/known_hosts", "-o", "ConnectTimeout=15",
-           "edward@192.168.31.254",
-           "cd /home/edward/k8s/ansible && python3 cluster-factory/scripts/portal_inventory.py"]
+           "edward@192.168.31.254", "observe"]
     result = subprocess.run(ssh, text=True, capture_output=True, timeout=180, check=False)
     if result.returncode:
         print(result.stderr, file=sys.stderr)
