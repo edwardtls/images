@@ -5,54 +5,78 @@ import hashlib
 import json
 import os
 import re
+import ssl
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from typing import Any
 
 import yaml
-from kubernetes import client, config
-from kubernetes.client.rest import ApiException
 
 NAMESPACE = os.getenv("POD_NAMESPACE", "factory")
 WORKER_IMAGE = os.environ["WORKER_IMAGE"]
-SSH_SECRET = os.getenv("SSH_SECRET", "cluster-factory-expiry-ssh")
+SSH_SECRET = os.getenv("SSH_SECRET", "cluster-factory-portal-ssh")
 SSH_CONFIG = os.getenv("SSH_CONFIG", "cluster-factory-expiry-ssh")
 TTL_RE = re.compile(r"^[1-9][0-9]*[hdw]$")
-
-config.load_incluster_config()
-core = client.CoreV1Api()
-batch = client.BatchV1Api()
-coordination = client.CoordinationV1Api()
+API = f"https://{os.environ.get('KUBERNETES_SERVICE_HOST', 'kubernetes.default.svc')}:{os.environ.get('KUBERNETES_SERVICE_PORT_HTTPS', '443')}"
+TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 
 
-def labels(selector: str) -> list[client.V1ConfigMap]:
-    return core.list_namespaced_config_map(NAMESPACE, label_selector=selector).items
+class KubeError(RuntimeError):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+
+
+def api(method: str, path: str, payload: Any = None, query: dict | None = None,
+        content_type="application/json") -> Any:
+    if query:
+        path += "?" + urllib.parse.urlencode(query)
+    data = json.dumps(payload).encode() if payload is not None else None
+    token = open(TOKEN_PATH, encoding="utf-8").read().strip()
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    if data is not None:
+        headers["Content-Type"] = content_type
+    req = urllib.request.Request(API + path, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=45, context=ssl.create_default_context(cafile=CA_PATH)) as response:
+            body = response.read()
+            return json.loads(body) if body else None
+    except urllib.error.HTTPError as exc:
+        raise KubeError(exc.code, exc.read().decode(errors="replace")) from exc
+
+
+def ns_path(resource: str, name: str | None = None, group="api/v1") -> str:
+    path = f"/{group}/namespaces/{urllib.parse.quote(NAMESPACE)}/{resource}"
+    return path + (f"/{urllib.parse.quote(name)}" if name else "")
+
+
+def labels(selector: str) -> list[dict]:
+    return api("GET", ns_path("configmaps"), query={"labelSelector": selector}).get("items", [])
 
 
 def read_json_configmap(name: str, key: str, fallback: Any) -> Any:
     try:
-        cm = core.read_namespaced_config_map(name, NAMESPACE)
-        return json.loads((cm.data or {}).get(key, ""))
-    except (ApiException, json.JSONDecodeError):
+        return json.loads(api("GET", ns_path("configmaps", name)).get("data", {}).get(key, ""))
+    except (KubeError, json.JSONDecodeError):
         return fallback
 
 
 def policy() -> dict:
     return read_json_configmap("cluster-factory-portal-policy", "policy.json", {
-        "default_user_cluster_limit": 1, "user_overrides": {}, "max_ttl_regular": "7d"
-    })
+        "default_user_cluster_limit": 1, "user_overrides": {}, "max_ttl_regular": "7d"})
 
 
 def inventory() -> dict:
     return read_json_configmap("cluster-factory-portal-inventory", "inventory.json", {
-        "updated_at": None, "clusters": {}, "proxmox": {"status": "awaiting-observer"}
-    })
+        "updated_at": None, "clusters": {}, "proxmox": {"status": "awaiting-observer"}})
 
 
 def versions() -> dict:
-    catalog_cm = core.read_namespaced_config_map("cluster-factory-version-catalog", NAMESPACE)
-    candidates_cm = core.read_namespaced_config_map("cluster-factory-version-candidates", NAMESPACE)
-    catalog = yaml.safe_load(catalog_cm.data["catalog.yml"])
-    candidates = json.loads(candidates_cm.data["candidates.json"])
+    catalog = yaml.safe_load(api("GET", ns_path("configmaps", "cluster-factory-version-catalog"))["data"]["catalog.yml"])
+    candidates = json.loads(api("GET", ns_path("configmaps", "cluster-factory-version-candidates"))["data"]["candidates.json"])
     result = {}
     for name, stable in catalog["components"].items():
         values = [{"value": str(stable["stable"]), "tested": bool(stable.get("tested"))}]
@@ -64,21 +88,26 @@ def versions() -> dict:
 
 
 def profiles() -> dict:
-    cm = core.read_namespaced_config_map("cluster-factory-portal-config", NAMESPACE)
-    return json.loads(cm.data["profiles.json"])
+    return json.loads(api("GET", ns_path("configmaps", "cluster-factory-portal-config"))["data"]["profiles.json"])
 
 
-def active_jobs() -> list[client.V1Job]:
-    jobs = batch.list_namespaced_job(NAMESPACE, label_selector="app.kubernetes.io/name=cluster-factory-job").items
-    return [job for job in jobs if not job.status.completion_time and not (job.status.failed or 0)]
+def terminal(job: dict) -> bool:
+    status = job.get("status", {})
+    return bool(status.get("completionTime") or status.get("failed"))
+
+
+def active_jobs() -> list[dict]:
+    jobs = api("GET", ns_path("jobs", group="apis/batch/v1"),
+               query={"labelSelector": "app.kubernetes.io/name=cluster-factory-job"}).get("items", [])
+    return [job for job in jobs if not terminal(job)]
 
 
 def cluster_records() -> list[dict]:
     records = []
-    for cm in labels("factory.d00s.org/type=cluster-record"):
+    for configmap in labels("factory.d00s.org/type=cluster-record"):
         try:
-            record = json.loads(cm.data["record.json"])
-            record["resource_name"] = cm.metadata.name
+            record = json.loads(configmap["data"]["record.json"])
+            record["resource_name"] = configmap["metadata"]["name"]
             records.append(record)
         except (KeyError, json.JSONDecodeError):
             continue
@@ -91,15 +120,14 @@ def quota_for(user: dict) -> int:
 
 
 def claim_profile(profile: str, holder: str) -> None:
-    lease = client.V1Lease(
-        metadata=client.V1ObjectMeta(name=f"factory-profile-{profile}", namespace=NAMESPACE,
-                                     labels={"app.kubernetes.io/name": "cluster-factory-lock"}),
-        spec=client.V1LeaseSpec(holder_identity=holder,
-                                acquire_time=dt.datetime.now(dt.timezone.utc), lease_duration_seconds=86400),
-    )
+    body = {"apiVersion": "coordination.k8s.io/v1", "kind": "Lease",
+            "metadata": {"name": f"factory-profile-{profile}", "namespace": NAMESPACE,
+                         "labels": {"app.kubernetes.io/name": "cluster-factory-lock"}},
+            "spec": {"holderIdentity": holder, "acquireTime": dt.datetime.now(dt.timezone.utc).isoformat(),
+                     "leaseDurationSeconds": 10800}}
     try:
-        coordination.create_namespaced_lease(NAMESPACE, lease)
-    except ApiException as exc:
+        api("POST", ns_path("leases", group="apis/coordination.k8s.io/v1"), body)
+    except KubeError as exc:
         if exc.status == 409:
             raise ValueError(f"Profile {profile} is already claimed by another job") from exc
         raise
@@ -107,151 +135,140 @@ def claim_profile(profile: str, holder: str) -> None:
 
 def release_profile(profile: str) -> None:
     try:
-        coordination.delete_namespaced_lease(f"factory-profile-{profile}", NAMESPACE)
-    except ApiException as exc:
+        api("DELETE", ns_path("leases", f"factory-profile-{profile}", group="apis/coordination.k8s.io/v1"),
+            {"apiVersion": "v1", "kind": "DeleteOptions", "propagationPolicy": "Background"})
+    except KubeError as exc:
         if exc.status != 404:
             raise
 
 
 def audit(job_id: str, record: dict) -> None:
-    body = client.V1ConfigMap(
-        metadata=client.V1ObjectMeta(
-            name=f"factory-audit-{job_id}", namespace=NAMESPACE,
-            labels={"factory.d00s.org/type": "audit", "factory.d00s.org/action": record["action"]},
-        ), data={"record.json": json.dumps(record, sort_keys=True)})
-    core.create_namespaced_config_map(NAMESPACE, body)
+    body = {"apiVersion": "v1", "kind": "ConfigMap",
+            "metadata": {"name": f"factory-audit-{job_id}", "namespace": NAMESPACE,
+                         "labels": {"factory.d00s.org/type": "audit", "factory.d00s.org/action": record["action"]}},
+            "data": {"record.json": json.dumps(record, sort_keys=True)}}
+    api("POST", ns_path("configmaps"), body)
 
 
 def patch_audit(job_id: str, changes: dict) -> None:
     name = f"factory-audit-{job_id}"
-    cm = core.read_namespaced_config_map(name, NAMESPACE)
-    record = json.loads(cm.data["record.json"])
-    record.update(changes)
-    core.patch_namespaced_config_map(name, NAMESPACE, {"data": {"record.json": json.dumps(record, sort_keys=True)}})
+    configmap = api("GET", ns_path("configmaps", name))
+    record = json.loads(configmap["data"]["record.json"]); record.update(changes)
+    api("PATCH", ns_path("configmaps", name), {"data": {"record.json": json.dumps(record, sort_keys=True)}},
+        content_type="application/merge-patch+json")
 
 
 def submit(action: str, request_data: dict, user: dict, source_ip: str) -> str:
-    profile = request_data["profile"]
-    job_id = uuid.uuid4().hex[:12]
-    claim_profile(profile, job_id)
+    profile = request_data["profile"]; job_id = uuid.uuid4().hex[:12]; claim_profile(profile, job_id)
     try:
-        spec_name = f"factory-request-{job_id}"
-        cm = client.V1ConfigMap(
-            metadata=client.V1ObjectMeta(name=spec_name, namespace=NAMESPACE,
-                                         labels={"factory.d00s.org/type": "request"}),
-            data={"request.yaml": yaml.safe_dump({"cluster_request": request_data}, sort_keys=False)})
-        core.create_namespaced_config_map(NAMESPACE, cm)
-        owner = hashlib.sha256(user["sub"].encode()).hexdigest()[:20]
+        spec_name = f"factory-request-{job_id}"; owner = hashlib.sha256(user["sub"].encode()).hexdigest()[:20]
+        api("POST", ns_path("configmaps"), {"apiVersion": "v1", "kind": "ConfigMap",
+            "metadata": {"name": spec_name, "namespace": NAMESPACE,
+                         "labels": {"factory.d00s.org/type": "request"}},
+            "data": {"request.yaml": yaml.safe_dump({"cluster_request": request_data}, sort_keys=False)}})
         job_name = f"factory-{action}-{job_id}"
-        env = [client.V1EnvVar(name="FACTORY_ACTION", value=action),
-               client.V1EnvVar(name="FACTORY_JOB_ID", value=job_id),
-               client.V1EnvVar(name="FACTORY_PROFILE", value=profile),
-               client.V1EnvVar(name="FACTORY_RETAIN_DATA", value=str(request_data.get("retain_data", False)).lower())]
-        container = client.V1Container(
-            name="runner", image=WORKER_IMAGE, image_pull_policy="IfNotPresent",
-            command=["python3", "-m", "app.job_runner"], env=env,
-            resources=client.V1ResourceRequirements(
-                requests={"cpu": "20m", "memory": "32Mi"}, limits={"cpu": "500m", "memory": "256Mi"}),
-            security_context=client.V1SecurityContext(allow_privilege_escalation=False,
-                                                       read_only_root_filesystem=True,
-                                                       capabilities=client.V1Capabilities(drop=["ALL"])),
-            volume_mounts=[
-                client.V1VolumeMount(name="request", mount_path="/request", read_only=True),
-                client.V1VolumeMount(name="ssh-key", mount_path="/ssh", read_only=True),
-                client.V1VolumeMount(name="ssh-config", mount_path="/ssh-config", read_only=True),
-                client.V1VolumeMount(name="tmp", mount_path="/tmp")])
-        pod = client.V1PodTemplateSpec(
-            metadata=client.V1ObjectMeta(labels={"app.kubernetes.io/name": "cluster-factory-job",
-                                                 "factory.d00s.org/job-id": job_id}),
-            spec=client.V1PodSpec(service_account_name="cluster-factory-runner", automount_service_account_token=False,
-                restart_policy="Never", security_context=client.V1PodSecurityContext(
-                    run_as_non_root=True, run_as_user=65532, run_as_group=65532, fs_group=65532,
-                    seccomp_profile=client.V1SeccompProfile(type="RuntimeDefault")),
-                containers=[container], volumes=[
-                    client.V1Volume(name="request", config_map=client.V1ConfigMapVolumeSource(name=spec_name, default_mode=0o400)),
-                    client.V1Volume(name="ssh-key", secret=client.V1SecretVolumeSource(secret_name=SSH_SECRET, default_mode=0o400)),
-                    client.V1Volume(name="ssh-config", config_map=client.V1ConfigMapVolumeSource(name=SSH_CONFIG, default_mode=0o444)),
-                    client.V1Volume(name="tmp", empty_dir=client.V1EmptyDirVolumeSource(size_limit="64Mi"))]))
-        job = client.V1Job(
-            metadata=client.V1ObjectMeta(name=job_name, namespace=NAMESPACE,
-                labels={"app.kubernetes.io/name": "cluster-factory-job", "factory.d00s.org/action": action,
-                        "factory.d00s.org/profile": profile, "factory.d00s.org/owner": owner,
-                        "factory.d00s.org/job-id": job_id},
-                annotations={"factory.d00s.org/owner-name": user.get("preferred_username", "unknown")}),
-            spec=client.V1JobSpec(backoff_limit=0, active_deadline_seconds=10800,
-                                  ttl_seconds_after_finished=604800, template=pod))
         audit(job_id, {"schema": 1, "job_id": job_id, "job_name": job_name, "action": action,
-                       "profile": profile, "owner_sub": user["sub"],
-                       "owner": user.get("preferred_username"), "source_ip": source_ip,
-                       "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(), "status": "submitted",
-                       "request": request_data})
-        batch.create_namespaced_job(NAMESPACE, job)
+                       "profile": profile, "owner_sub": user["sub"], "owner": user.get("preferred_username"),
+                       "source_ip": source_ip, "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                       "status": "submitted", "request": request_data})
+        labels_map = {"app.kubernetes.io/name": "cluster-factory-job", "factory.d00s.org/action": action,
+                      "factory.d00s.org/profile": profile, "factory.d00s.org/owner": owner,
+                      "factory.d00s.org/job-id": job_id}
+        container = {"name": "runner", "image": WORKER_IMAGE, "imagePullPolicy": "IfNotPresent",
+            "command": ["python3", "-m", "app.job_runner"],
+            "env": [{"name": "FACTORY_ACTION", "value": action}, {"name": "FACTORY_JOB_ID", "value": job_id},
+                    {"name": "FACTORY_PROFILE", "value": profile},
+                    {"name": "FACTORY_RETAIN_DATA", "value": str(request_data.get("retain_data", False)).lower()}],
+            "resources": {"requests": {"cpu": "20m", "memory": "32Mi"},
+                          "limits": {"cpu": "500m", "memory": "256Mi"}},
+            "securityContext": {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,
+                                "capabilities": {"drop": ["ALL"]}},
+            "volumeMounts": [{"name": "request", "mountPath": "/request", "readOnly": True},
+                             {"name": "ssh-key", "mountPath": "/ssh", "readOnly": True},
+                             {"name": "ssh-config", "mountPath": "/ssh-config", "readOnly": True},
+                             {"name": "tmp", "mountPath": "/tmp"}]}
+        pod_spec = {"serviceAccountName": "cluster-factory-runner", "automountServiceAccountToken": False,
+            "restartPolicy": "Never", "imagePullSecrets": [{"name": "cluster-factory-portal-harbor"}],
+            "securityContext": {"runAsNonRoot": True, "runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532,
+                                "seccompProfile": {"type": "RuntimeDefault"}}, "containers": [container],
+            "volumes": [{"name": "request", "configMap": {"name": spec_name, "defaultMode": 256}},
+                        {"name": "ssh-key", "secret": {"secretName": SSH_SECRET, "defaultMode": 256}},
+                        {"name": "ssh-config", "configMap": {"name": SSH_CONFIG, "defaultMode": 292}},
+                        {"name": "tmp", "emptyDir": {"sizeLimit": "64Mi"}}]}
+        job = {"apiVersion": "batch/v1", "kind": "Job",
+            "metadata": {"name": job_name, "namespace": NAMESPACE, "labels": labels_map,
+                         "annotations": {"factory.d00s.org/owner-name": user.get("preferred_username", "unknown")}},
+            "spec": {"backoffLimit": 0, "activeDeadlineSeconds": 10800, "ttlSecondsAfterFinished": 604800,
+                     "template": {"metadata": {"labels": labels_map}, "spec": pod_spec}}}
+        api("POST", ns_path("jobs", group="apis/batch/v1"), job)
         return job_id
     except Exception:
-        release_profile(profile)
-        raise
+        release_profile(profile); raise
 
 
-def job_for(job_id: str) -> client.V1Job:
-    items = batch.list_namespaced_job(NAMESPACE, label_selector=f"factory.d00s.org/job-id={job_id}").items
+def job_for(job_id: str) -> dict:
+    items = api("GET", ns_path("jobs", group="apis/batch/v1"),
+                query={"labelSelector": f"factory.d00s.org/job-id={job_id}"}).get("items", [])
     if not items:
         raise KeyError(job_id)
     return items[0]
 
 
+def pods_for_job(name: str) -> list[dict]:
+    return api("GET", ns_path("pods"), query={"labelSelector": f"job-name={name}"}).get("items", [])
+
+
+def pod_log(name: str) -> str:
+    path = ns_path("pods", name) + "/log?" + urllib.parse.urlencode({"timestamps": "true"})
+    token = open(TOKEN_PATH, encoding="utf-8").read().strip()
+    req = urllib.request.Request(API + path, headers={"Authorization": f"Bearer {token}", "Accept": "text/plain"})
+    with urllib.request.urlopen(req, timeout=45, context=ssl.create_default_context(cafile=CA_PATH)) as response:
+        return response.read().decode(errors="replace")
+
+
 def reconcile() -> None:
-    for job in batch.list_namespaced_job(NAMESPACE, label_selector="app.kubernetes.io/name=cluster-factory-job").items:
-        if not (job.status.completion_time or (job.status.failed or 0)):
-            continue
-        job_id = job.metadata.labels["factory.d00s.org/job-id"]
-        profile = job.metadata.labels["factory.d00s.org/profile"]
-        action = job.metadata.labels["factory.d00s.org/action"]
-        succeeded = bool(job.status.succeeded)
+    jobs = api("GET", ns_path("jobs", group="apis/batch/v1"),
+               query={"labelSelector": "app.kubernetes.io/name=cluster-factory-job"}).get("items", [])
+    for job in jobs:
+        if not terminal(job): continue
+        labels_map = job["metadata"]["labels"]
+        job_id = labels_map["factory.d00s.org/job-id"]; profile = labels_map["factory.d00s.org/profile"]
+        action = labels_map["factory.d00s.org/action"]; succeeded = bool(job.get("status", {}).get("succeeded"))
         try:
-            audit_cm = core.read_namespaced_config_map(f"factory-audit-{job_id}", NAMESPACE)
-            existing_audit = json.loads(audit_cm.data["record.json"])
-            if existing_audit.get("reconciled"):
-                continue
+            existing = json.loads(api("GET", ns_path("configmaps", f"factory-audit-{job_id}"))["data"]["record.json"])
+            if existing.get("reconciled"): continue
             patch_audit(job_id, {"status": "succeeded" if succeeded else "failed",
                                  "completed_at": dt.datetime.now(dt.timezone.utc).isoformat()})
-        except ApiException:
-            pass
+        except KubeError:
+            release_profile(profile); continue
         if succeeded:
-            audit_cm = core.read_namespaced_config_map(f"factory-audit-{job_id}", NAMESPACE)
-            record = json.loads(audit_cm.data["record.json"])
-            cluster_cm = f"factory-cluster-{profile}"
+            record = json.loads(api("GET", ns_path("configmaps", f"factory-audit-{job_id}"))["data"]["record.json"])
+            cluster_name = f"factory-cluster-{profile}"
             if action == "create":
-                ttl = record["request"]["lifecycle"]["ttl"]
-                amount, unit = int(ttl[:-1]), ttl[-1]
+                ttl = record["request"]["lifecycle"]["ttl"]; amount, unit = int(ttl[:-1]), ttl[-1]
                 delta = {"h": dt.timedelta(hours=amount), "d": dt.timedelta(days=amount),
                          "w": dt.timedelta(weeks=amount)}[unit]
                 cluster = {"profile": profile, "owner_sub": record["owner_sub"], "owner": record["owner"],
-                           "created_at": record["completed_at"],
-                           "expires_at": (dt.datetime.now(dt.timezone.utc) + delta).isoformat(),
-                           "url": profiles()[profile]["url"], "request": record["request"]}
-                body = client.V1ConfigMap(metadata=client.V1ObjectMeta(name=cluster_cm, namespace=NAMESPACE,
-                    labels={"factory.d00s.org/type": "cluster-record"}),
-                    data={"record.json": json.dumps(cluster, sort_keys=True)})
-                try:
-                    core.create_namespaced_config_map(NAMESPACE, body)
-                except ApiException as exc:
+                    "created_at": record["completed_at"],
+                    "expires_at": (dt.datetime.now(dt.timezone.utc) + delta).isoformat(),
+                    "url": profiles()[profile]["url"], "request": record["request"], "managed_by_portal": True}
+                body = {"apiVersion": "v1", "kind": "ConfigMap",
+                        "metadata": {"name": cluster_name, "namespace": NAMESPACE,
+                                     "labels": {"factory.d00s.org/type": "cluster-record"}},
+                        "data": {"record.json": json.dumps(cluster, sort_keys=True)}}
+                try: api("POST", ns_path("configmaps"), body)
+                except KubeError as exc:
                     if exc.status == 409:
-                        core.replace_namespaced_config_map(cluster_cm, NAMESPACE, body)
-                    else:
-                        raise
+                        api("PATCH", ns_path("configmaps", cluster_name), {"data": body["data"]},
+                            content_type="application/merge-patch+json")
+                    else: raise
             else:
-                try:
-                    core.delete_namespaced_config_map(cluster_cm, NAMESPACE)
-                except ApiException as exc:
-                    if exc.status != 404:
-                        raise
-        release_profile(profile)
-        try:
-            patch_audit(job_id, {"reconciled": True})
-        except ApiException:
-            pass
+                try: api("DELETE", ns_path("configmaps", cluster_name), {"apiVersion": "v1", "kind": "DeleteOptions"})
+                except KubeError as exc:
+                    if exc.status != 404: raise
+        release_profile(profile); patch_audit(job_id, {"reconciled": True})
 
 
 def update_policy(payload: dict) -> None:
-    core.patch_namespaced_config_map("cluster-factory-portal-policy", NAMESPACE,
-                                     {"data": {"policy.json": json.dumps(payload, sort_keys=True)}})
+    api("PATCH", ns_path("configmaps", "cluster-factory-portal-policy"),
+        {"data": {"policy.json": json.dumps(payload, sort_keys=True)}}, content_type="application/merge-patch+json")

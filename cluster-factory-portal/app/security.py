@@ -3,9 +3,7 @@ import hmac
 import ipaddress
 import os
 import secrets
-from functools import wraps
-
-from fastapi import HTTPException, Request
+from flask import abort, request, session
 
 
 USER_GROUP = os.getenv("OIDC_USER_GROUP", "factory-users")
@@ -16,12 +14,12 @@ def groups(user: dict) -> set[str]:
     return {str(group).strip("/") for group in user.get("groups", [])}
 
 
-def current_user(request: Request) -> dict:
-    user = request.session.get("user")
+def current_user() -> dict:
+    user = session.get("user")
     if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        abort(401, "Authentication required")
     if USER_GROUP not in groups(user) and ADMIN_GROUP not in groups(user):
-        raise HTTPException(status_code=403, detail="Factory access has not been granted")
+        abort(403, "Factory access has not been granted")
     return user
 
 
@@ -29,34 +27,34 @@ def is_admin(user: dict) -> bool:
     return ADMIN_GROUP in groups(user)
 
 
-def require_admin(request: Request) -> dict:
-    user = current_user(request)
+def require_admin() -> dict:
+    user = current_user()
     if not is_admin(user):
-        raise HTTPException(status_code=403, detail="Administrator access required")
+        abort(403, "Administrator access required")
     return user
 
 
-def csrf_token(request: Request) -> str:
-    token = request.session.get("csrf")
+def csrf_token() -> str:
+    token = session.get("csrf")
     if not token:
         token = secrets.token_urlsafe(32)
-        request.session["csrf"] = token
+        session["csrf"] = token
     return token
 
 
-def verify_csrf(request: Request, supplied: str) -> None:
-    expected = request.session.get("csrf", "")
+def verify_csrf(supplied: str) -> None:
+    expected = session.get("csrf", "")
     if not expected or not hmac.compare_digest(expected, supplied or ""):
-        raise HTTPException(status_code=403, detail="Invalid request token")
+        abort(403, "Invalid request token")
 
 
 def owner_id(user: dict) -> str:
     return hashlib.sha256(user["sub"].encode()).hexdigest()[:20]
 
 
-def client_ip(request: Request) -> str:
+def client_ip() -> str:
     forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    candidate = forwarded or (request.client.host if request.client else "0.0.0.0")
+    candidate = forwarded or request.remote_addr or "0.0.0.0"
     try:
         return str(ipaddress.ip_address(candidate))
     except ValueError:

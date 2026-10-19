@@ -2,10 +2,24 @@
 
 import json
 import os
+import ssl
 import subprocess
 import sys
+import urllib.request
 
-from kubernetes import client, config
+
+def patch_inventory(payload: dict) -> None:
+    namespace = os.getenv("POD_NAMESPACE", "factory")
+    host = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    port = os.environ.get("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    path = f"/api/v1/namespaces/{namespace}/configmaps/cluster-factory-portal-inventory"
+    token = open("/var/run/secrets/kubernetes.io/serviceaccount/token", encoding="utf-8").read().strip()
+    body = json.dumps({"data": {"inventory.json": json.dumps(payload, sort_keys=True)}}).encode()
+    req = urllib.request.Request(f"https://{host}:{port}{path}", data=body, method="PATCH", headers={
+        "Authorization": f"Bearer {token}", "Content-Type": "application/merge-patch+json"})
+    context = ssl.create_default_context(cafile="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+    with urllib.request.urlopen(req, timeout=45, context=context):
+        pass
 
 
 def main() -> int:
@@ -15,14 +29,8 @@ def main() -> int:
            "edward@192.168.31.254", "observe"]
     result = subprocess.run(ssh, text=True, capture_output=True, timeout=180, check=False)
     if result.returncode:
-        print(result.stderr, file=sys.stderr)
-        return result.returncode
-    payload = json.loads(result.stdout)
-    config.load_incluster_config()
-    api = client.CoreV1Api()
-    namespace = os.getenv("POD_NAMESPACE", "factory")
-    api.patch_namespaced_config_map("cluster-factory-portal-inventory", namespace,
-                                    {"data": {"inventory.json": json.dumps(payload, sort_keys=True)}})
+        print(result.stderr, file=sys.stderr); return result.returncode
+    payload = json.loads(result.stdout); patch_inventory(payload)
     print(json.dumps({"updated_at": payload["updated_at"], "clusters": list(payload["clusters"])}))
     return 0
 
