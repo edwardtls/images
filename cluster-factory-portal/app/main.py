@@ -3,11 +3,19 @@ from __future__ import annotations
 import json
 import os
 import smtplib
+import base64
+import hashlib
+import hmac
+import secrets
+import ssl
 import threading
 import time
+import urllib.parse
+import urllib.request
 from email.message import EmailMessage
 
-from authlib.integrations.flask_client import OAuth
+from authlib.jose import jwt
+from authlib.jose.errors import JoseError
 from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -24,12 +32,36 @@ app.config.update(MAX_CONTENT_LENGTH=65536, SESSION_COOKIE_HTTPONLY=True,
                   SESSION_REFRESH_EACH_REQUEST=False, PERMANENT_SESSION_LIFETIME=28800)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-oauth = OAuth(app)
-keycloak = oauth.register(
-    "keycloak", client_id=os.environ["OIDC_CLIENT_ID"],
-    client_secret=os.environ["OIDC_CLIENT_SECRET"],
-    server_metadata_url=os.environ["OIDC_DISCOVERY_URL"],
-    client_kwargs={"scope": "openid profile email groups", "code_challenge_method": "S256"})
+_oidc_cache: dict[str, tuple[float, dict]] = {}
+
+
+def oidc_json(url: str, *, form_data: dict | None = None) -> dict:
+    issuer = os.environ["OIDC_ISSUER"]
+    expected = urllib.parse.urlsplit(issuer)
+    target = urllib.parse.urlsplit(url)
+    if target.scheme != "https" or target.netloc != expected.netloc:
+        raise RuntimeError("OIDC endpoint is outside the configured HTTPS issuer")
+    data = urllib.parse.urlencode(form_data).encode() if form_data is not None else None
+    headers = {"Accept": "application/json"}
+    if data is not None:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data is not None else "GET")
+    with urllib.request.urlopen(req, timeout=15, context=ssl.create_default_context()) as response:
+        return json.load(response)
+
+
+def oidc_document(kind: str) -> dict:
+    cached = _oidc_cache.get(kind)
+    if cached and time.monotonic() - cached[0] < 300:
+        return cached[1]
+    if kind == "discovery":
+        document = oidc_json(os.environ["OIDC_DISCOVERY_URL"])
+        if document.get("issuer") != os.environ["OIDC_ISSUER"]:
+            raise RuntimeError("OIDC discovery issuer mismatch")
+    else:
+        document = oidc_json(oidc_document("discovery")["jwks_uri"])
+    _oidc_cache[kind] = (time.monotonic(), document)
+    return document
 
 
 @app.before_request
@@ -107,13 +139,55 @@ def landing():
 
 @app.get("/login")
 def login():
-    return keycloak.authorize_redirect(os.environ["OIDC_REDIRECT_URI"])
+    discovery = oidc_document("discovery")
+    state = secrets.token_urlsafe(32); nonce = secrets.token_urlsafe(32)
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    session["oidc"] = {"state": state, "nonce": nonce, "verifier": verifier, "created": int(time.time())}
+    params = {"client_id": os.environ["OIDC_CLIENT_ID"], "response_type": "code",
+              "redirect_uri": os.environ["OIDC_REDIRECT_URI"], "scope": "openid profile email groups",
+              "state": state, "nonce": nonce, "code_challenge": challenge, "code_challenge_method": "S256"}
+    return redirect(discovery["authorization_endpoint"] + "?" + urllib.parse.urlencode(params), code=302)
 
 
 @app.get("/auth/callback")
 def callback():
-    token = keycloak.authorize_access_token()
-    user = dict(token.get("userinfo") or keycloak.userinfo(token=token))
+    if request.args.get("error"):
+        abort(401, "Identity provider rejected authentication")
+    pending = session.pop("oidc", None)
+    if (not pending or int(time.time()) - int(pending.get("created", 0)) > 600
+            or not hmac.compare_digest(str(pending.get("state", "")), request.args.get("state", ""))):
+        abort(400, "Invalid or expired OIDC state")
+    code = request.args.get("code", "")
+    if not code:
+        abort(400, "OIDC authorization code is missing")
+    discovery = oidc_document("discovery")
+    try:
+        token = oidc_json(discovery["token_endpoint"], form_data={
+            "grant_type": "authorization_code", "code": code,
+            "redirect_uri": os.environ["OIDC_REDIRECT_URI"],
+            "client_id": os.environ["OIDC_CLIENT_ID"],
+            "client_secret": os.environ["OIDC_CLIENT_SECRET"],
+            "code_verifier": pending["verifier"],
+        })
+    except (OSError, RuntimeError, ValueError):
+        app.logger.warning("OIDC token exchange failed", exc_info=True)
+        abort(401, "Authentication could not be completed")
+    encoded = token.get("id_token")
+    if not encoded:
+        abort(401, "Identity provider did not return an ID token")
+    try:
+        claims = jwt.decode(encoded, oidc_document("jwks"), claims_options={
+            "iss": {"essential": True, "value": os.environ["OIDC_ISSUER"]},
+            "aud": {"essential": True, "value": os.environ["OIDC_CLIENT_ID"]},
+            "exp": {"essential": True},
+            "nonce": {"essential": True, "value": pending["nonce"]},
+        })
+        claims.validate(leeway=60)
+    except (JoseError, OSError, RuntimeError, ValueError):
+        app.logger.warning("OIDC ID token validation failed", exc_info=True)
+        abort(401, "Identity token validation failed")
+    user = dict(claims)
     allowed = {os.getenv("OIDC_USER_GROUP", "factory-users"),
                os.getenv("OIDC_ADMIN_GROUP", "factory-admins")}
     if not allowed & groups(user):
