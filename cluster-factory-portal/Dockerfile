@@ -2,7 +2,8 @@ FROM python:3.13.9-alpine3.22@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413
 
 WORKDIR /audit
 COPY requirements.txt /audit/requirements.txt
-RUN pip install --no-cache-dir pip-audit==2.9.0 \
+RUN apk upgrade --no-cache \
+    && pip install --no-cache-dir pip-audit==2.9.0 \
     && pip-audit --requirement /audit/requirements.txt \
     && touch /audit/passed
 
@@ -10,7 +11,8 @@ FROM python:3.13.9-alpine3.22@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413
 
 COPY --from=audit /audit/passed /audit-passed
 
-RUN apk add --no-cache openssh-client ca-certificates tini \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache openssh-client ca-certificates tini \
     && test -f /audit-passed \
     && rm /audit-passed \
     && addgroup -g 65532 portal \
@@ -18,7 +20,8 @@ RUN apk add --no-cache openssh-client ca-certificates tini \
 
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --requirement /app/requirements.txt
+RUN pip install --no-cache-dir --requirement /app/requirements.txt \
+    && pip uninstall --yes pip setuptools wheel
 COPY app /app/app
 RUN chown -R 65532:65532 /app
 
