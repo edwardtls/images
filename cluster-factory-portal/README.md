@@ -17,3 +17,9 @@ SMTP, Harbor pull, and restricted SSH material at deployment time.
 The Kubernetes API integration uses the standard library with the mounted
 service-account CA and token. Keeping the runtime dependency set small makes
 the recurring image audit easier to review.
+
+Bulk decommissioning is ownership-aware. Regular users can queue only their
+own cluster records; administrators can queue every recorded or observed
+factory profile. The UI requires an exact `DELETE ALL` confirmation. Requests
+are audited and profile-locked, and the controller dispatches at most one
+deletion Job at a time.

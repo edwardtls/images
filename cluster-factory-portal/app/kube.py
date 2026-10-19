@@ -126,6 +126,23 @@ def quota_for(user: dict) -> int:
     return int(current.get("user_overrides", {}).get(user["sub"], current.get("default_user_cluster_limit", 1)))
 
 
+def deletion_request(profile: str) -> dict:
+    """Build a validated teardown request for an imported factory cluster."""
+    selected = {component: choices[0]["value"] for component, choices in versions().items()}
+    return {
+        "name": profile, "profile": profile,
+        "kubernetes_version": selected.pop("kubernetes"),
+        "calico_version": selected.pop("calico"),
+        "containerd_version": selected.pop("containerd"),
+        "argo_chart_version": selected.pop("argocd_chart"),
+        "topology": {"control_planes": 1, "workers": 0},
+        "storage": {"mode": "both"},
+        "addons": {"monitoring": False, "metrics_server": False, "test_nginx": False},
+        "lifecycle": {"ttl": "24h", "retain_data_on_expiry": False},
+        "versions": selected, "failure_policy": "rollback",
+    }
+
+
 def claim_profile(profile: str, holder: str) -> None:
     body = {"apiVersion": "coordination.k8s.io/v1", "kind": "Lease",
             "metadata": {"name": f"factory-profile-{profile}", "namespace": NAMESPACE,
@@ -194,6 +211,11 @@ def pending_operation(configmap: dict) -> dict:
 
 
 def dispatch_pending() -> None:
+    running_deletion = any(
+        job.get("metadata", {}).get("labels", {}).get("factory.d00s.org/action") == "delete"
+        for job in api("GET", ns_path("jobs", group="apis/batch/v1"),
+                       query={"labelSelector": "app.kubernetes.io/name=cluster-factory-job"}).get("items", [])
+        if not terminal(job))
     for request_cm in labels("factory.d00s.org/type=request"):
         metadata = request_cm["metadata"]
         if metadata.get("annotations", {}).get("factory.d00s.org/dispatched-at"):
@@ -202,6 +224,8 @@ def dispatch_pending() -> None:
         job_id = labels_map.get("factory.d00s.org/job-id", "")
         action = labels_map.get("factory.d00s.org/action", "")
         profile = labels_map.get("factory.d00s.org/profile", "")
+        if action == "delete" and running_deletion:
+            continue
         try:
             if not JOB_ID_RE.fullmatch(job_id) or action not in {"create", "delete"} or profile not in profiles():
                 raise ValueError("unsafe request metadata")
@@ -248,6 +272,8 @@ def dispatch_pending() -> None:
             api("PATCH", ns_path("configmaps", metadata["name"]),
                 {"metadata": {"annotations": {"factory.d00s.org/dispatched-at":
                     dt.datetime.now(dt.timezone.utc).isoformat()}}}, content_type="application/merge-patch+json")
+            if action == "delete":
+                running_deletion = True
         except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
             api("PATCH", ns_path("configmaps", metadata["name"]),
                 {"metadata": {"annotations": {"factory.d00s.org/dispatch-error": str(exc)[:200]}}},

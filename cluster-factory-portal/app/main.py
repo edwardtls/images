@@ -301,6 +301,34 @@ def delete_cluster(profile: str):
     return redirect(f"/jobs/{job_id}", code=303)
 
 
+@app.post("/clusters/delete-all")
+def delete_all_clusters():
+    user = current_user(); values = form(); verify_csrf(values.get("csrf", ""))
+    if values.get("confirm", "").strip() != "DELETE ALL":
+        abort(400, "Type DELETE ALL to confirm bulk decommissioning")
+    retain_data = values.get("retain_data") == "on"
+    if retain_data and not is_admin(user):
+        abort(403, "Only administrators can retain cluster data")
+
+    records = {record["profile"]: record for record in kube.cluster_records()}
+    if is_admin(user):
+        profiles = set(records) | set(kube.inventory().get("clusters", {}))
+    else:
+        profiles = {profile for profile, record in records.items()
+                    if record.get("owner_sub") == user["sub"]}
+    queued = 0; skipped = 0
+    for profile in sorted(profiles):
+        record = records.get(profile)
+        request_data = dict(record["request"]) if record else kube.deletion_request(profile)
+        request_data["retain_data"] = retain_data
+        try:
+            kube.submit("delete", request_data, user, client_ip())
+            queued += 1
+        except ValueError:
+            skipped += 1
+    return redirect(f"/clusters?bulk_queued={queued}&bulk_skipped={skipped}", code=303)
+
+
 @app.get("/jobs/<job_id>")
 def job_page(job_id: str):
     user = current_user()

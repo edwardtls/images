@@ -3,3 +3,10 @@
 .config{max-height:320px;overflow:auto;background:#edf0ed;padding:14px;font-size:11px}
 .card h2 a{text-decoration:none}
 .card h2 a:hover{text-decoration:underline}
+.notice{background:#dff2eb;border-left:5px solid #287a68;padding:16px 20px;margin-bottom:24px}
+.danger-zone{display:grid;grid-template-columns:1.5fr 1fr;gap:28px;align-items:end;background:#fff4f1;border:1px solid #dfb5ad;border-left:6px solid var(--red);padding:24px;margin:28px 0}
+.danger-zone h2{margin:0 0 6px}
+.danger-zone p{margin:0;color:var(--muted)}
+.danger-zone form{display:grid;gap:12px}
+.danger-solid{background:var(--red)}
+@media(max-width:760px){.danger-zone{grid-template-columns:1fr}}
