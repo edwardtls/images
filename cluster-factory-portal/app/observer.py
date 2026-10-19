@@ -8,6 +8,15 @@ import sys
 import urllib.request
 
 
+def private_key() -> str:
+    destination = "/tmp/id_ed25519"
+    descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as target, open("/ssh/id_ed25519", "rb") as source:
+        target.write(source.read())
+    os.chmod(destination, 0o600)
+    return destination
+
+
 def patch_inventory(payload: dict) -> None:
     namespace = os.getenv("POD_NAMESPACE", "factory")
     host = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
@@ -23,7 +32,7 @@ def patch_inventory(payload: dict) -> None:
 
 
 def main() -> int:
-    ssh = ["ssh", "-p", "2200", "-i", "/ssh/id_ed25519", "-o", "BatchMode=yes",
+    ssh = ["ssh", "-p", "2200", "-i", private_key(), "-o", "BatchMode=yes",
            "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
            "-o", "UserKnownHostsFile=/ssh-config/known_hosts", "-o", "ConnectTimeout=15",
            "edward@192.168.31.254", "observe"]

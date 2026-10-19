@@ -231,7 +231,7 @@ def dispatch_pending() -> None:
             "securityContext": {"runAsNonRoot": True, "runAsUser": 65532, "runAsGroup": 65532, "fsGroup": 65532,
                                 "seccompProfile": {"type": "RuntimeDefault"}}, "containers": [container],
             "volumes": [{"name": "request", "configMap": {"name": metadata["name"], "defaultMode": 256}},
-                        {"name": "ssh-key", "secret": {"secretName": SSH_SECRET, "defaultMode": 256}},
+                        {"name": "ssh-key", "secret": {"secretName": SSH_SECRET, "defaultMode": 288}},
                         {"name": "ssh-config", "configMap": {"name": SSH_CONFIG, "defaultMode": 292}},
                         {"name": "tmp", "emptyDir": {"sizeLimit": "64Mi"}}]}
             job = {"apiVersion": "batch/v1", "kind": "Job",
