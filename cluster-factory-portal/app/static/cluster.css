@@ -12,6 +12,8 @@
 .security-table .tr{grid-template-columns:1.05fr 1.2fr .8fr 1.3fr 1.45fr .8fr .65fr;align-items:center;gap:12px}
 .security-table .tr small{display:block;overflow-wrap:anywhere}
 .security-table form{margin:0}
+.security-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media(max-width:900px){.security-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .compact{padding:7px 10px}
 .security-health{margin-top:28px}
 @media(max-width:760px){.danger-zone{grid-template-columns:1fr}}

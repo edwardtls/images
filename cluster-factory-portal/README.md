@@ -24,7 +24,8 @@ factory profile. The UI requires an exact `DELETE ALL` confirmation. Requests
 are audited and profile-locked, and the controller dispatches at most one
 deletion Job at a time.
 
-The authenticated `SSH & firewall` view reads a sanitized CrowdSec summary
+The authenticated `Edge activity` view reads a sanitized CrowdSec summary
 through the same forced-command Atlantis SSH key. All users can see health and
-ban counts; only Factory administrators can remove an IP decision. Attempted
-passwords remain confined to Cowrie/Loki and are never rendered by the portal.
+SSH/HTTP ban counts; only Factory administrators can remove an IP decision.
+Attempted passwords, HTTP headers, cookies, and query strings are never rendered.
+HTTP evidence is limited to method, host, sanitized path, and status.
