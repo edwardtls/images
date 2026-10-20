@@ -9,7 +9,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/clusters"><span class="brand-mark">d0</span><span>Cluster Factory</span></a>
-    {% if user %}<nav><a href="/clusters">Clusters</a><a href="/build">New build</a><a href="/howto">How it works</a>{% if admin %}<a href="/admin">Admin</a>{% endif %}</nav>
+    {% if user %}<nav><a href="/clusters">Clusters</a><a href="/build">New build</a><a href="/security">SSH &amp; firewall</a><a href="/howto">How it works</a>{% if admin %}<a href="/admin">Admin</a>{% endif %}</nav>
     <div class="identity"><span>{{ user.preferred_username }}</span><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Sign out</button></form></div>{% endif %}
   </header>
   <main>{% block content %}{% endblock %}</main>

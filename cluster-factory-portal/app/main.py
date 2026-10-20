@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import os
 import smtplib
+import subprocess
 import base64
 import hashlib
 import hmac
@@ -20,7 +22,7 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import kube
+from . import edge_security, kube
 from .security import (client_ip, csrf_token, current_user, groups, is_admin,
                        owner_id, require_admin, verify_csrf)
 
@@ -381,6 +383,32 @@ def job_stream(job_id: str):
 @app.get("/howto")
 def howto():
     current_user(); return page("howto.html")
+
+
+@app.get("/security")
+def security_dashboard():
+    current_user()
+    try:
+        status = edge_security.status()
+        return page("security.html", status=status, error=None)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+        app.logger.warning("edge security status failed", exc_info=True)
+        return page("security.html", status={}, error=str(exc)[:200]), 503
+
+
+@app.post("/security/bans/<address>/delete")
+def security_delete(address: str):
+    require_admin(); values = form(); verify_csrf(values.get("csrf", ""))
+    try:
+        normalized = str(ipaddress.ip_address(address))
+        edge_security.delete(normalized)
+    except ValueError:
+        abort(400, "Invalid IP address")
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        app.logger.warning("edge security decision removal failed", exc_info=True)
+        abort(502, "The distributed firewall did not accept the removal")
+    app.logger.info("administrator removed distributed edge ban for %s", normalized)
+    return redirect("/security?removed=" + urllib.parse.quote(normalized), code=303)
 
 
 @app.post("/contact")

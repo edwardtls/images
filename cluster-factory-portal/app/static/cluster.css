@@ -9,4 +9,9 @@
 .danger-zone p{margin:0;color:var(--muted)}
 .danger-zone form{display:grid;gap:12px}
 .danger-solid{background:var(--red)}
+.security-table .tr{grid-template-columns:1.05fr 1.2fr .8fr 1.3fr 1.45fr .8fr .65fr;align-items:center;gap:12px}
+.security-table .tr small{display:block;overflow-wrap:anywhere}
+.security-table form{margin:0}
+.compact{padding:7px 10px}
+.security-health{margin-top:28px}
 @media(max-width:760px){.danger-zone{grid-template-columns:1fr}}
