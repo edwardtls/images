@@ -5,6 +5,11 @@ boto3. It can dump PostgreSQL 15 through 18 databases, upload the resulting
 archive to an S3-compatible service such as MinIO, and execute the retention
 script used by the d00s backup CronJobs.
 
+The image upgrades packages inherited from the Alpine base during every
+no-cache build. It removes the upstream PostgreSQL `gosu` helper and clears the
+database-server entrypoint because backup jobs supply explicit commands and do
+not initialize or run PostgreSQL locally.
+
 Use the immutable workflow-produced `18.6-YYYYMMDD-GITSHA-RUN` tag and digest
 in Kubernetes. Mutable tags are not published or used in manifests.
 
