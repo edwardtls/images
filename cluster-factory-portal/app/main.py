@@ -31,7 +31,7 @@ app.secret_key = os.environ["SESSION_SECRET"]
 app.config.update(MAX_CONTENT_LENGTH=65536, SESSION_COOKIE_HTTPONLY=True,
                   SESSION_COOKIE_SECURE=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_NAME="__Host-factory_session",
-                  SESSION_REFRESH_EACH_REQUEST=False, PERMANENT_SESSION_LIFETIME=28800)
+                  SESSION_REFRESH_EACH_REQUEST=False, PERMANENT_SESSION_LIFETIME=86400)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 _oidc_cache: dict[str, tuple[float, dict]] = {}
