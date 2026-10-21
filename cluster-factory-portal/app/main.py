@@ -388,12 +388,18 @@ def howto():
 @app.get("/security")
 def security_dashboard():
     current_user()
+    windows = (("3h", "Last 3 hours"), ("24h", "Last 24 hours"),
+               ("3d", "Last 3 days"), ("7d", "Last week"), ("all", "All"))
+    window = request.args.get("window", "3h")
+    if window not in dict(windows):
+        abort(400, "Invalid security time window")
     try:
-        status = edge_security.status()
-        return page("security.html", status=status, error=None)
+        status = edge_security.status(window)
+        return page("security.html", status=status, error=None, window=window, windows=windows)
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         app.logger.warning("edge security status failed", exc_info=True)
-        return page("security.html", status={}, error=str(exc)[:200]), 503
+        return page("security.html", status={}, error=str(exc)[:200], window=window,
+                    windows=windows), 503
 
 
 @app.post("/security/bans/<address>/delete")

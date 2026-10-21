@@ -2,18 +2,20 @@
 <section class="page-head"><div><div class="eyebrow">Distributed edge defence</div><h1>Edge activity</h1><p>SSH and RDP honeypot activity plus HTTP/S abuse decisions shared by Atlantis, Zion and Asguard.</p></div></section>
 {% if error %}<section class="warning"><strong>Security status is temporarily unavailable.</strong><span>{{ error }}</span></section>
 {% else %}
+<nav class="security-window" aria-label="Finding time range">
+  {% for value, label in windows %}<a href="/security?window={{ value }}" class="{{ 'active' if window == value else '' }}"{% if window == value %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>
 <section class="metrics security-metrics">
-  <article><span>Active IP bans</span><strong>{{ status.active_bans }}</strong></article>
-  <article><span>HTTP/S bans</span><strong>{{ status.http_bans }}</strong></article>
-  <article><span>SSH bans</span><strong>{{ status.ssh_bans }}</strong></article>
-  <article><span>RDP bans</span><strong>{{ status.rdp_bans }}</strong></article>
+  <article><span>Findings in range</span><strong>{{ status.active_bans }}</strong><small>{{ status.total_active_bans }} total active bans</small></article>
+  <article><span>Attack types</span><strong>{{ status.active_bans }}</strong><small class="metric-breakdown"><b>SSH</b> {{ status.ssh_bans }} · <b>RDP</b> {{ status.rdp_bans }} · <b>HTTP/S</b> {{ status.http_bans }}</small></article>
+  <article class="country-metric"><span>Top countries</span>{% if status.top_countries %}<ol>{% for item in status.top_countries %}<li><b>{{ item.country }}</b><em>{{ item.count }}</em></li>{% endfor %}</ol>{% else %}<small>No findings in this range</small>{% endif %}</article>
   <article><span>Healthy sensors</span><strong>{{ status.sensors|selectattr('healthy')|list|length }}/{{ status.sensors|length }}</strong></article>
   <article><span>Healthy firewalls</span><strong>{{ status.bouncers|selectattr('healthy')|list|length }}/{{ status.bouncers|length }}</strong></article>
 </section>
-<section><h2>Active decisions</h2>
+<section><h2>Findings · newest first</h2>
 {% if status.decisions %}<div class="table security-table"><div class="tr th"><span>Address</span><span>Service / evidence</span><span>Sensor / target</span><span>Country / network</span><span>Reason</span><span>Remaining</span><span>Action</span></div>
 {% for decision in status.decisions %}<div class="tr"><span class="mono">{{ decision.ip }}</span><span>{{ decision.service }}{% if decision.service == 'HTTP/S' %}<small class="mono">{{ decision.http_method or 'REQUEST' }} {{ decision.http_path or '—' }}{% if decision.http_status %} → {{ decision.http_status }}{% endif %}</small>{% else %}<small>user: <span class="mono">{{ decision.target_user or '—' }}</span></small>{% endif %}</span><span>{{ decision.sensor }}<small>{{ decision.target_host }}</small></span><span>{{ decision.country or '—' }}<small>{{ decision.network or 'Unknown network' }}</small></span><span>{{ decision.scenario }}</span><span class="mono">{{ decision.duration }}</span><span>{% if admin %}<form method="post" action="/security/bans/{{ decision.ip }}/delete" data-confirm="Remove the distributed ban for {{ decision.ip }}?"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger compact">Remove</button></form>{% else %}<span class="muted">Admin only</span>{% endif %}</span></div>{% endfor %}</div>
-{% else %}<div class="empty">No active firewall decisions.</div>{% endif %}</section>
+{% else %}<div class="empty">No active firewall decisions in this time range.</div>{% endif %}</section>
 <section class="split security-health"><div class="panel"><h2>Log processors</h2><div class="mini-list">{% for sensor in status.sensors %}<div><span>{{ sensor.name }}</span><span class="status {{ 'ready' if sensor.healthy else '' }}">{{ 'healthy' if sensor.healthy else 'unhealthy' }}</span></div>{% endfor %}</div></div><div class="panel"><h2>Firewall bouncers</h2><div class="mini-list">{% for bouncer in status.bouncers %}<div><span>{{ bouncer.name }}</span><span class="status {{ 'ready' if bouncer.healthy else '' }}">{{ 'healthy' if bouncer.healthy else 'unhealthy' }}</span></div>{% endfor %}</div></div></section>
 <p class="note">Evidence is deliberately minimized: SSH passwords, RDP secrets, HTTP headers, cookies and query strings are never displayed. RDP records source/target and an optional legacy client username; HTTP evidence is limited to method, host, sanitized path and status.</p>
 {% endif %}{% endblock %}

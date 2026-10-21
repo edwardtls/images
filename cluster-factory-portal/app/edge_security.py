@@ -6,6 +6,8 @@ import json
 import os
 import subprocess
 
+VALID_WINDOWS = {"3h", "24h", "3d", "7d", "all"}
+
 
 def _command(*parts: str) -> dict:
     command = [
@@ -23,8 +25,10 @@ def _command(*parts: str) -> dict:
     return document
 
 
-def status() -> dict:
-    return _command("security", "status")
+def status(window: str = "3h") -> dict:
+    if window not in VALID_WINDOWS:
+        raise ValueError("invalid security time window")
+    return _command("security", "status", window)
 
 
 def delete(address: str) -> dict:
