@@ -346,10 +346,14 @@ def reconcile() -> None:
                 ttl = record["request"]["lifecycle"]["ttl"]; amount, unit = int(ttl[:-1]), ttl[-1]
                 delta = {"h": dt.timedelta(hours=amount), "d": dt.timedelta(days=amount),
                          "w": dt.timedelta(weeks=amount)}[unit]
+                profile_config = profiles()[profile]
+                test_url = profile_config["url"]
                 cluster = {"profile": profile, "owner_sub": record["owner_sub"], "owner": record["owner"],
                     "created_at": record["completed_at"],
                     "expires_at": (dt.datetime.now(dt.timezone.utc) + delta).isoformat(),
-                    "url": profiles()[profile]["url"], "request": record["request"], "managed_by_portal": True}
+                    "url": test_url, "test_url": test_url,
+                    "argocd_url": f"https://argo.apps.{profile_config['domain']}",
+                    "request": record["request"], "managed_by_portal": True}
                 body = {"apiVersion": "v1", "kind": "ConfigMap",
                         "metadata": {"name": cluster_name, "namespace": NAMESPACE,
                                      "labels": {"factory.d00s.org/type": "cluster-record"}},
