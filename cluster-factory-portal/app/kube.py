@@ -316,7 +316,10 @@ def pods_for_job(name: str) -> list[dict]:
 def pod_log(name: str) -> str:
     path = ns_path("pods", name) + "/log?" + urllib.parse.urlencode({"timestamps": "true"})
     token = open(TOKEN_PATH, encoding="utf-8").read().strip()
-    req = urllib.request.Request(API + path, headers={"Authorization": f"Bearer {token}", "Accept": "text/plain"})
+    # The Kubernetes log subresource returns text/plain, but its API handler
+    # rejects an explicit text/plain Accept header with HTTP 406. Let the
+    # client send its default */* negotiation instead.
+    req = urllib.request.Request(API + path, headers={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req, timeout=45, context=ssl.create_default_context(cafile=CA_PATH)) as response:
         return response.read().decode(errors="replace")
 

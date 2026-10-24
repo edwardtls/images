@@ -352,30 +352,41 @@ def job_stream(job_id: str):
         abort(404, "Job not found")
     if not is_admin(user) and job["metadata"]["labels"].get("factory.d00s.org/owner") != owner_id(user):
         abort(403, "This job belongs to another user")
-    if job.get("kind") == "PendingFactoryRequest":
-        return Response('event: stage\ndata: "queued"\n\n', mimetype="text/event-stream",
-                        headers={"Retry-After": "2"})
-    pods = kube.pods_for_job(job["metadata"]["name"])
-    if not pods:
-        return Response('event: stage\ndata: "queued"\n\n', mimetype="text/event-stream")
-    pod = pods[0]["metadata"]["name"]
-
     @stream_with_context
     def events():
-        seen = 0
+        seen = 0; pod = None; last_stage = None
         while True:
             try:
+                current = kube.operation_for(job_id)
+                if current.get("kind") == "PendingFactoryRequest":
+                    if last_stage != "queued":
+                        yield 'event: stage\ndata: "queued"\n\n'; last_stage = "queued"
+                    yield ": keepalive\n\n"; time.sleep(2); continue
+                pods = kube.pods_for_job(current["metadata"]["name"])
+                if not pods:
+                    if kube.terminal(current):
+                        outcome = "Succeeded" if current.get("status", {}).get("succeeded") else "Failed"
+                        yield f"event: done\ndata: {json.dumps(outcome)}\n\n"; return
+                    if last_stage != "queued":
+                        yield 'event: stage\ndata: "queued"\n\n'; last_stage = "queued"
+                    yield ": keepalive\n\n"; time.sleep(2); continue
+                current_pod = pods[0]["metadata"]["name"]
+                if current_pod != pod:
+                    pod = current_pod; seen = 0
                 lines = kube.pod_log(pod).splitlines()
                 for line in lines[seen:]:
                     event = "stage" if "FACTORY_STAGE" in line else "log"
                     yield f"event: {event}\ndata: {json.dumps(line)}\n\n"
                 seen = len(lines)
-                if kube.terminal(kube.job_for(job_id)):
-                    break
+                current = kube.job_for(job_id)
+                if kube.terminal(current):
+                    outcome = "Succeeded" if current.get("status", {}).get("succeeded") else "Failed"
+                    yield f"event: done\ndata: {json.dumps(outcome)}\n\n"; return
             except Exception as exc:
-                yield f"event: error\ndata: {json.dumps(str(exc))}\n\n"; break
+                # Surface transient API errors and keep retrying instead of
+                # falsely declaring a live operation finished.
+                yield f"event: stream-error\ndata: {json.dumps(str(exc))}\n\n"
             yield ": keepalive\n\n"; time.sleep(2)
-        yield "event: done\ndata: complete\n\n"
 
     return Response(events(), mimetype="text/event-stream", headers={"X-Accel-Buffering": "no"})
 
