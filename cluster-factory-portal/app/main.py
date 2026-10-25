@@ -315,7 +315,7 @@ def build():
         control_planes = int(values.get("control_planes", "1")); workers = int(values.get("workers", "3"))
     except ValueError:
         abort(400, "Topology values must be integers")
-    if not 1 <= control_planes <= 3 or not 0 <= workers <= 6:
+    if control_planes not in {1, 3, 5} or workers not in {1, 2, 3, 4, 5, 6}:
         abort(400, "Requested topology is outside the supported range")
     request_data = {
         "name": profile, "profile": profile,
