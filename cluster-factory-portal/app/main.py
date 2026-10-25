@@ -117,6 +117,57 @@ def visible_records(user: dict) -> list[dict]:
     return [record for record in records if record.get("owner_sub") == user["sub"]]
 
 
+def normalized_live_cluster(live: dict | None) -> dict:
+    """Return a complete view model even while observer data is unavailable.
+
+    Cluster records and observer inventory are updated independently.  During
+    creation and deletion it is therefore valid for a record to exist without
+    a corresponding inventory entry.  Templates must render that state rather
+    than treating it as an application error.
+    """
+    result = {
+        "status": "unobserved",
+        "url": "#",
+        "test_url": "#",
+        "nodes": {"ready": "—", "total": "—"},
+        "pods": {"running": "—", "total": "—", "pending": 0,
+                 "failed": 0, "failures": []},
+        "argo": {"healthy": "—", "total": "—"},
+        "resources": {"cpu": "—", "memory": "—", "disk": "—"},
+        "components": {},
+        "urls": [],
+        "validation_passed": False,
+        "cleanup_residuals": None,
+    }
+    supplied = live or {}
+    result.update(supplied)
+    for key in ("nodes", "pods", "argo", "resources"):
+        merged = dict(result[key]) if isinstance(result.get(key), dict) else {}
+        defaults = {
+            "nodes": {"ready": "—", "total": "—"},
+            "pods": {"running": "—", "total": "—", "pending": 0,
+                     "failed": 0, "failures": []},
+            "argo": {"healthy": "—", "total": "—"},
+            "resources": {"cpu": "—", "memory": "—", "disk": "—"},
+        }[key]
+        result[key] = {**defaults, **merged}
+    if not isinstance(result.get("components"), dict):
+        result["components"] = {}
+    if not isinstance(result.get("urls"), list):
+        result["urls"] = []
+    return result
+
+
+def normalized_inventory(records: list[dict], inventory: dict | None = None) -> dict:
+    result = dict(inventory or kube.inventory())
+    observed = dict(result.get("clusters") or {})
+    for record in records:
+        profile = record["profile"]
+        observed[profile] = normalized_live_cluster(observed.get(profile))
+    result["clusters"] = observed
+    return result
+
+
 def reconciler():
     while True:
         try:
@@ -211,7 +262,8 @@ def logout():
 @app.get("/clusters")
 def clusters():
     user = current_user(); kube.reconcile()
-    return page("clusters.html", clusters=visible_records(user), inventory=kube.inventory(),
+    records = visible_records(user)
+    return page("clusters.html", clusters=records, inventory=normalized_inventory(records),
                 jobs=kube.active_jobs(), quota=kube.quota_for(user))
 
 
@@ -225,9 +277,9 @@ def build_form():
 def cluster_detail(profile: str):
     user = current_user()
     record = next((item for item in visible_records(user) if item["profile"] == profile), None)
-    live = kube.inventory().get("clusters", {}).get(profile)
-    if not record or not live:
+    if not record:
         abort(404, "Cluster not found")
+    live = normalized_live_cluster(kube.inventory().get("clusters", {}).get(profile))
     return page("cluster.html", cluster=record, live=live)
 
 
