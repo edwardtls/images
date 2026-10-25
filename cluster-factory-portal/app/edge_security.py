@@ -25,7 +25,7 @@ def _command(*parts: str) -> dict:
     return document
 
 
-def status(window: str = "3h") -> dict:
+def status(window: str = "today") -> dict:
     if window not in VALID_WINDOWS:
         raise ValueError("invalid security time window")
     return _command("security", "status", window)
