@@ -2,7 +2,18 @@ document.querySelectorAll('[data-dialog]').forEach(b=>b.addEventListener('click'
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));
 document.querySelectorAll('[data-confirm]').forEach(f=>f.addEventListener('submit',e=>{if(!confirm(f.dataset.confirm))e.preventDefault()}));
 const log=document.getElementById('log');
-if(log){let received=false;const append=line=>{if(!received){log.textContent='';received=true}log.textContent+=line+'\n';log.scrollTop=log.scrollHeight};const source=new EventSource(`/api/jobs/${log.dataset.job}/stream`);source.onopen=()=>{if(document.getElementById('job-state').textContent==='Reconnecting…')document.getElementById('job-state').textContent='Running'};source.addEventListener('log',e=>append(JSON.parse(e.data)));source.addEventListener('stage',e=>{const line=JSON.parse(e.data);document.getElementById('stage').textContent=line.replace(/^.*FACTORY_STAGE\s+/, '').replaceAll('-',' ');if(line!=='queued')append(line)});source.addEventListener('stream-error',e=>{document.getElementById('job-state').textContent='Reconnecting…';append(`Log stream unavailable: ${JSON.parse(e.data)}`)});source.addEventListener('done',e=>{document.getElementById('job-state').textContent=JSON.parse(e.data);source.close()});source.onerror=()=>{document.getElementById('job-state').textContent='Reconnecting…'}}
+if(log){
+  const limit=3000;let lines=[],pending=[],received=false,flushTimer=null;
+  const flush=()=>{flushTimer=null;if(!pending.length)return;const follow=log.scrollHeight-log.scrollTop-log.clientHeight<80;lines.push(...pending);pending=[];if(lines.length>limit)lines.splice(0,lines.length-limit);log.textContent=lines.join('\n')+'\n';if(follow||!received)log.scrollTop=log.scrollHeight;received=true};
+  const enqueue=(incoming,reset=false)=>{if(reset){lines=[];pending=[];received=false}pending.push(...incoming);if(!flushTimer)flushTimer=setTimeout(flush,100)};
+  const source=new EventSource(`/api/jobs/${log.dataset.job}/stream`);
+  source.onopen=()=>{if(document.getElementById('job-state').textContent==='Reconnecting…')document.getElementById('job-state').textContent='Running'};
+  source.addEventListener('logs',event=>{const payload=JSON.parse(event.data);enqueue(payload.lines||[],Boolean(payload.reset))});
+  source.addEventListener('stage',event=>{const line=JSON.parse(event.data);document.getElementById('stage').textContent=line.replace(/^.*FACTORY_STAGE\s+/, '').replaceAll('-',' ')});
+  source.addEventListener('stream-error',event=>{document.getElementById('job-state').textContent='Reconnecting…';enqueue([`Log stream unavailable: ${JSON.parse(event.data)}`])});
+  source.addEventListener('done',event=>{flush();document.getElementById('job-state').textContent=JSON.parse(event.data);source.close()});
+  source.onerror=()=>{document.getElementById('job-state').textContent='Reconnecting…'};
+}
 
 const securityChart=document.getElementById('security-trend-chart');
 if(securityChart){

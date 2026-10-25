@@ -35,6 +35,8 @@ app.config.update(MAX_CONTENT_LENGTH=65536, SESSION_COOKIE_HTTPONLY=True,
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 _oidc_cache: dict[str, tuple[float, dict]] = {}
+LIVE_LOG_LINE_LIMIT = 3000
+LIVE_LOG_BATCH_SIZE = 200
 
 
 def oidc_json(url: str, *, form_data: dict | None = None) -> dict:
@@ -333,6 +335,13 @@ def delete_all_clusters():
 
 @app.get("/jobs/<job_id>")
 def job_page(job_id: str):
+    job = authorized_operation(job_id)
+    return page("job.html", job=job, job_id=job_id)
+
+
+def authorized_operation(job_id: str) -> dict:
+    if not kube.JOB_ID_RE.fullmatch(job_id):
+        abort(404, "Job not found")
     user = current_user()
     try:
         job = kube.operation_for(job_id)
@@ -340,21 +349,42 @@ def job_page(job_id: str):
         abort(404, "Job not found")
     if not is_admin(user) and job["metadata"]["labels"].get("factory.d00s.org/owner") != owner_id(user):
         abort(403, "This job belongs to another user")
-    return page("job.html", job=job, job_id=job_id)
+    return job
+
+
+@app.get("/jobs/<job_id>/logs/download")
+def job_log_download(job_id: str):
+    job = authorized_operation(job_id)
+    if job.get("kind") == "PendingFactoryRequest":
+        abort(409, "The runner has not started, so no full log exists yet")
+    pods = sorted(kube.pods_for_job(job["metadata"]["name"]),
+                  key=lambda pod: pod["metadata"].get("creationTimestamp", ""))
+    if not pods:
+        abort(404, "The retained full log is no longer available")
+
+    @stream_with_context
+    def complete_log():
+        multiple = len(pods) > 1
+        for index, pod in enumerate(pods):
+            if multiple:
+                if index:
+                    yield b"\n"
+                name = pod["metadata"]["name"]
+                yield f"===== pod: {name} =====\n".encode()
+            yield from kube.pod_log_chunks(pod["metadata"]["name"])
+
+    return Response(complete_log(), mimetype="text/plain", headers={
+        "Content-Disposition": f'attachment; filename="factory-job-{job_id}.log"',
+        "X-Content-Type-Options": "nosniff",
+    })
 
 
 @app.get("/api/jobs/<job_id>/stream")
 def job_stream(job_id: str):
-    user = current_user()
-    try:
-        job = kube.operation_for(job_id)
-    except KeyError:
-        abort(404, "Job not found")
-    if not is_admin(user) and job["metadata"]["labels"].get("factory.d00s.org/owner") != owner_id(user):
-        abort(403, "This job belongs to another user")
+    authorized_operation(job_id)
     @stream_with_context
     def events():
-        seen = 0; pod = None; last_stage = None
+        seen = 0; pod = None; last_stage = None; reset_view = True
         while True:
             try:
                 current = kube.operation_for(job_id)
@@ -372,11 +402,25 @@ def job_stream(job_id: str):
                     yield ": keepalive\n\n"; time.sleep(2); continue
                 current_pod = pods[0]["metadata"]["name"]
                 if current_pod != pod:
-                    pod = current_pod; seen = 0
+                    pod = current_pod; seen = 0; reset_view = True
                 lines = kube.pod_log(pod).splitlines()
-                for line in lines[seen:]:
-                    event = "stage" if "FACTORY_STAGE" in line else "log"
-                    yield f"event: {event}\ndata: {json.dumps(line)}\n\n"
+                if len(lines) < seen:
+                    seen = 0; reset_view = True
+                start = seen
+                if len(lines) - start > LIVE_LOG_LINE_LIMIT:
+                    start = len(lines) - LIVE_LOG_LINE_LIMIT
+                    reset_view = True
+                new_lines = lines[start:]
+                stages = [line for line in new_lines if "FACTORY_STAGE" in line]
+                if stages and stages[-1] != last_stage:
+                    last_stage = stages[-1]
+                    yield f"event: stage\ndata: {json.dumps(last_stage)}\n\n"
+                for offset in range(0, len(new_lines), LIVE_LOG_BATCH_SIZE):
+                    payload = {"lines": new_lines[offset:offset + LIVE_LOG_BATCH_SIZE],
+                               "reset": reset_view and offset == 0}
+                    yield f"event: logs\ndata: {json.dumps(payload)}\n\n"
+                if new_lines:
+                    reset_view = False
                 seen = len(lines)
                 current = kube.job_for(job_id)
                 if kube.terminal(current):

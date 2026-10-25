@@ -18,6 +18,12 @@ The Kubernetes API integration uses the standard library with the mounted
 service-account CA and token. Keeping the runtime dependency set small makes
 the recurring image audit easier to review.
 
+Live job output is sent as bounded Server-Sent Event batches instead of one
+browser update per line. The viewer retains only the latest 3,000 lines and
+replaces that tail cleanly after a reconnect. An ownership-checked download
+route streams the complete retained Kubernetes pod log in 64 KiB chunks, so a
+large download is not buffered in portal memory.
+
 Bulk decommissioning is ownership-aware. Regular users can queue only their
 own cluster records; administrators can queue every recorded or observed
 factory profile. The UI requires an exact `DELETE ALL` confirmation. Requests

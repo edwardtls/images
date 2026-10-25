@@ -313,15 +313,27 @@ def pods_for_job(name: str) -> list[dict]:
     return api("GET", ns_path("pods"), query={"labelSelector": f"job-name={name}"}).get("items", [])
 
 
-def pod_log(name: str) -> str:
+def pod_log_request(name: str):
     path = ns_path("pods", name) + "/log?" + urllib.parse.urlencode({"timestamps": "true"})
     token = open(TOKEN_PATH, encoding="utf-8").read().strip()
     # The Kubernetes log subresource returns text/plain, but its API handler
     # rejects an explicit text/plain Accept header with HTTP 406. Let the
     # client send its default */* negotiation instead.
-    req = urllib.request.Request(API + path, headers={"Authorization": f"Bearer {token}"})
+    return urllib.request.Request(API + path, headers={"Authorization": f"Bearer {token}"})
+
+
+def pod_log(name: str) -> str:
+    req = pod_log_request(name)
     with urllib.request.urlopen(req, timeout=45, context=ssl.create_default_context(cafile=CA_PATH)) as response:
         return response.read().decode(errors="replace")
+
+
+def pod_log_chunks(name: str, chunk_size: int = 65536):
+    """Stream an unabridged pod log without buffering it in portal memory."""
+    req = pod_log_request(name)
+    with urllib.request.urlopen(req, timeout=45, context=ssl.create_default_context(cafile=CA_PATH)) as response:
+        while chunk := response.read(chunk_size):
+            yield chunk
 
 
 def reconcile() -> None:
