@@ -131,6 +131,7 @@ def deletion_request(profile: str) -> dict:
     selected = {component: choices[0]["value"] for component, choices in versions().items()}
     return {
         "name": profile, "profile": profile,
+        "portal_owner": "factory-system",
         "kubernetes_version": selected.pop("kubernetes"),
         "calico_version": selected.pop("calico"),
         "containerd_version": selected.pop("containerd"),
@@ -365,6 +366,7 @@ def reconcile() -> None:
                     "expires_at": (dt.datetime.now(dt.timezone.utc) + delta).isoformat(),
                     "url": test_url, "test_url": test_url,
                     "argocd_url": f"https://argo.apps.{profile_config['domain']}",
+                    "forgejo_url": f"https://git.apps.d00s.org/factory/{profile}",
                     "request": record["request"], "managed_by_portal": True}
                 body = {"apiVersion": "v1", "kind": "ConfigMap",
                         "metadata": {"name": cluster_name, "namespace": NAMESPACE,

@@ -138,6 +138,7 @@ def normalized_live_cluster(live: dict | None) -> dict:
         "urls": [],
         "validation_passed": False,
         "cleanup_residuals": None,
+        "forgejo_url": "https://git.apps.d00s.org",
     }
     supplied = live or {}
     result.update(supplied)
@@ -319,6 +320,7 @@ def build():
         abort(400, "Requested topology is outside the supported range")
     request_data = {
         "name": profile, "profile": profile,
+        "portal_owner": user.get("preferred_username", "factory-user"),
         "kubernetes_version": selected_versions.pop("kubernetes"),
         "calico_version": selected_versions.pop("calico"),
         "containerd_version": selected_versions.pop("containerd"),
