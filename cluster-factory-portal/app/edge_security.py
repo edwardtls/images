@@ -6,7 +6,7 @@ import json
 import os
 import subprocess
 
-VALID_WINDOWS = {"3h", "24h", "3d", "7d", "all"}
+VALID_WINDOWS = {"3h", "today", "24h", "3d", "7d", "all"}
 
 
 def _command(*parts: str) -> dict:

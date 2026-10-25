@@ -495,7 +495,7 @@ def howto():
 @app.get("/security")
 def security_dashboard():
     current_user()
-    windows = (("3h", "Last 3 hours"), ("24h", "Last 24 hours"),
+    windows = (("3h", "Last 3 hours"), ("today", "Today"), ("24h", "Last 24 hours"),
                ("3d", "Last 3 days"), ("7d", "Last week"), ("all", "All"))
     window = request.args.get("window", "3h")
     if window not in dict(windows):
