@@ -1,4 +1,10 @@
 .facts div{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.topology-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.choice-title{display:block;margin-bottom:8px;font-weight:650}
+.choice-boxes{display:grid;gap:8px}.choice-boxes.three{grid-template-columns:repeat(3,1fr)}.choice-boxes.six{grid-template-columns:repeat(6,1fr)}
+.choice-box{display:block;position:relative;cursor:pointer}.choice-box input{position:absolute;opacity:0;inset:0;width:100%;height:100%;cursor:pointer}
+.choice-box span{display:grid;place-items:center;min-height:48px;border:1px solid #aeb5b5;border-radius:5px;background:#fafaf7;font:750 15px/1 ui-monospace,monospace;transition:background .12s,border-color .12s,color .12s,box-shadow .12s}
+.choice-box:hover span{border-color:#287a68}.choice-box input:checked+span{background:var(--navy);border-color:var(--navy);color:#fff}.choice-box input:focus-visible+span{box-shadow:0 0 0 3px var(--mint)}
 .facts dd{font-weight:750}
 .config{max-height:320px;overflow:auto;background:#edf0ed;padding:14px;font-size:11px}
 .card h2 a{text-decoration:none}
@@ -40,3 +46,4 @@
 .compact{padding:7px 10px}
 .security-health{margin-top:28px}
 @media(max-width:760px){.danger-zone{grid-template-columns:1fr;padding:20px}.danger-zone button{width:100%}.facts div{gap:14px}.facts dd{text-align:right;overflow-wrap:anywhere}}
+@media(max-width:700px){.topology-grid{grid-template-columns:1fr}.choice-boxes.six{grid-template-columns:repeat(3,1fr)}}
