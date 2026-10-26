@@ -188,6 +188,7 @@ function createFactoryProvisionAction() {
       if (!apiUrl || !repoUrl || !token) {
         throw new Error('Factory GitOps integration is not configured');
       }
+      const argoRepoUrl = process.env.FORGEJO_ARGO_REPO_URL ?? repoUrl;
 
       const content =
         ctx.input.kind === 'database'
@@ -217,7 +218,7 @@ function createFactoryProvisionAction() {
         branch,
         token,
         path: `apps/team-${name}.yaml`,
-        content: applicationManifest(name, repoUrl),
+        content: applicationManifest(name, argoRepoUrl),
         message: `Register ${ctx.input.kind} ${name} with Argo CD`,
       });
 
