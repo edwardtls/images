@@ -7,7 +7,8 @@ metadata:
 spec:
   profile:
     displayName: Edward
-    email: edwardtls@gmail.com
+    # This must match the email claim issued by the d00s Keycloak realm.
+    email: edwardtls@mac.com
   memberOf: [platform-admins]
 ---
 # https://backstage.io/docs/features/software-catalog/descriptor-format#kind-group

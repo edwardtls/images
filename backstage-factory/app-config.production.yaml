@@ -52,10 +52,7 @@ auth:
         sessionDuration: { hours: 24 }
         signIn:
           resolvers:
-            # Keycloak/LDAP email addresses can change independently of the
-            # Backstage catalog. Match the stable preferred_username claim to
-            # metadata.name instead (for example edwardtls -> User:edwardtls).
-            - resolver: preferredUsernameMatchingUserEntityName
+            - resolver: emailMatchingUserEntityProfileEmail
 
 integrations:
   github: []
