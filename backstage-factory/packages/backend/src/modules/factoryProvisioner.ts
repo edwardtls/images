@@ -41,7 +41,9 @@ async function putForgejoFile(options: {
   }
 
   const response = await fetch(endpoint, {
-    method: 'PUT',
+    // Forgejo uses POST to create a new file and PUT to update an
+    // existing one. The sha is required only for the update path.
+    method: sha ? 'PUT' : 'POST',
     headers,
     body: JSON.stringify({
       branch: options.branch,
