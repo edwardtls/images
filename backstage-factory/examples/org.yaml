@@ -1,0 +1,22 @@
+---
+# https://backstage.io/docs/features/software-catalog/descriptor-format#kind-user
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: edwardtls
+spec:
+  profile:
+    displayName: Edward
+    email: edwardtls@gmail.com
+  memberOf: [platform-admins]
+---
+# https://backstage.io/docs/features/software-catalog/descriptor-format#kind-group
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-admins
+spec:
+  type: team
+  profile:
+    displayName: Platform Administrators
+  children: []

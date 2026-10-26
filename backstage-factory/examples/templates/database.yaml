@@ -1,0 +1,48 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: cloudnativepg-database
+  title: CloudNativePG database
+  description: Provision a low-footprint PostgreSQL cluster on Ceph through Forgejo and Argo CD.
+  tags: [postgresql, cloudnativepg, ceph, gitops]
+spec:
+  owner: group:default/platform-admins
+  type: database
+  parameters:
+    - title: Database details
+      required: [name, owner, instances, storageSize]
+      properties:
+        name:
+          title: Database and namespace name
+          type: string
+          pattern: '^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$'
+        owner:
+          title: Team or owner
+          type: string
+          default: platform-admins
+        instances:
+          title: PostgreSQL instances
+          type: integer
+          enum: [1, 2, 3]
+          default: 2
+        storageSize:
+          title: Ceph storage size
+          type: string
+          enum: [2Gi, 5Gi, 10Gi, 20Gi]
+          default: 5Gi
+  steps:
+    - id: provision
+      name: Commit database to GitOps
+      action: factory:provision
+      input:
+        kind: database
+        name: ${{ parameters.name }}
+        owner: ${{ parameters.owner }}
+        instances: ${{ parameters.instances }}
+        storageSize: ${{ parameters.storageSize }}
+  output:
+    links:
+      - title: Cluster Git repository
+        url: ${{ steps.provision.output.repositoryUrl }}
+      - title: Argo CD application
+        url: https://argocd.apps.dev.d00s.org/applications/argocd/${{ steps.provision.output.applicationName }}
