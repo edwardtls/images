@@ -133,7 +133,7 @@ function applicationManifest(name: string, repoUrl: string): string {
 kind: Application
 metadata:
   name: team-${name}
-  namespace: argocd
+  namespace: argo
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
