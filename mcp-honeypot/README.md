@@ -12,6 +12,7 @@ connection. Credential-shaped argument fields are redacted before logging.
 In Kubernetes the pod has no service-account token, runs as UID 65532 with a
 read-only root filesystem, drops every capability, and is covered by a
 default-deny egress policy. OTEL forwards its stdout events to Loki.
+The process serves TLS directly, so the Traefik-to-pod hop is encrypted too.
 
 What can be observed:
 

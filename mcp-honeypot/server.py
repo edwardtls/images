@@ -8,6 +8,7 @@ import json
 import os
 import re
 import secrets
+import ssl
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -332,5 +333,13 @@ class Server(ThreadingHTTPServer):
 
 
 if __name__ == "__main__":
-    emit({"event_type": "mcp_honeypot", "event": "startup", "listen_port": PORT})
-    Server((HOST, PORT), Handler).serve_forever()
+    cert_file = os.environ.get("TLS_CERT_FILE", "")
+    key_file = os.environ.get("TLS_KEY_FILE", "")
+    server = Server((HOST, PORT), Handler)
+    if cert_file and key_file:
+        tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls.minimum_version = ssl.TLSVersion.TLSv1_2
+        tls.load_cert_chain(certfile=cert_file, keyfile=key_file)
+        server.socket = tls.wrap_socket(server.socket, server_side=True)
+    emit({"event_type": "mcp_honeypot", "event": "startup", "listen_port": PORT, "tls": bool(cert_file)})
+    server.serve_forever()
