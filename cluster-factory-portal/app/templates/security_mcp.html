@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block title %}MCP honeypot · Factory{% endblock %}{% block content %}
+<section class="page-head"><div><div class="eyebrow">Contained protocol decoy</div><h1>MCP activity</h1><p>Sanitized requests sent to the isolated Model Context Protocol honeypot.</p></div></section>
+<nav class="security-tabs" aria-label="Security views"><a href="/security">Edge defence</a><a href="/security/mcp" class="active" aria-current="page">MCP honeypot</a></nav>
+{% if error %}<section class="warning"><strong>MCP telemetry is temporarily unavailable.</strong><span>{{ error }}</span></section>
+{% else %}
+<nav class="security-window" aria-label="MCP event time range">
+  {% for value, label in windows %}<a href="/security/mcp?window={{ value }}" class="{{ 'active' if window == value else '' }}"{% if window == value %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>
+<section class="metrics mcp-metrics">
+  <article><span>Requests</span><strong>{{ status.total }}</strong><small>Up to 500 newest events</small></article>
+  <article><span>Unique sources</span><strong>{{ status.unique_sources }}</strong><small>Privacy-safe source fingerprints</small></article>
+  <article><span>Tool calls</span><strong>{{ status.tool_calls }}</strong><small>All tools are inert</small></article>
+  <article><span>Authorization supplied</span><strong>{{ status.authenticated }}</strong><small>Presence only; values are never retained</small></article>
+</section>
+<section class="grid mcp-summary">
+  <article class="panel"><h2>Methods</h2><div class="mini-list">{% for item in status.methods %}<div><span class="mono">{{ item.name }}</span><strong>{{ item.count }}</strong></div>{% else %}<p class="muted">No methods observed.</p>{% endfor %}</div></article>
+  <article class="panel"><h2>Advertised tools requested</h2><div class="mini-list">{% for item in status.tools %}<div><span class="mono">{{ item.name }}</span><strong>{{ item.count }}</strong></div>{% else %}<p class="muted">No tool calls observed.</p>{% endfor %}</div></article>
+  <article class="panel"><h2>Clients</h2><div class="mini-list">{% for item in status.clients %}<div><span class="mono">{{ item.name }}</span><strong>{{ item.count }}</strong></div>{% else %}<p class="muted">No clients identified.</p>{% endfor %}</div></article>
+</section>
+<section><div class="security-trend-head"><div><h2>Interactions · newest first</h2><p>Expand an event to inspect the bounded, re-redacted parameters submitted by the client.</p></div>{% if status.truncated %}<strong>Newest 500 shown</strong>{% endif %}</div>
+{% if status.events %}<div class="table mcp-table"><div class="tr th"><span>Time / source</span><span>Client</span><span>Method / tool</span><span>Protocol</span><span>Submitted context</span></div>
+{% for event in status.events %}<div class="tr"><span data-label="Time / source"><time class="mono" datetime="{{ event.timestamp }}">{{ event.timestamp }}</time><small class="mono">{{ event.source_ip }}</small><small title="Stable one-way source identifier">fp {{ event.source_fingerprint }}</small></span><span data-label="Client"><span class="mono">{{ event.client_name }}</span>{% if event.client_version %}<small>v{{ event.client_version }}</small>{% endif %}<small>{{ event.user_agent }}</small></span><span data-label="Method / tool"><span class="mono">{{ event.method }}</span>{% if event.tool %}<small class="mono">{{ event.tool }}</small>{% endif %}{% if event.authorization_present %}<small>Authorization: {{ event.authorization_scheme or 'present' }}</small>{% endif %}</span><span class="mono" data-label="Protocol">{{ event.protocol }}</span><span data-label="Submitted context"><details><summary>View sanitized parameters</summary><pre class="mcp-payload">{{ event.params_json }}</pre></details>{% if event.origin != '—' %}<small>Origin: {{ event.origin }}</small>{% endif %}</span></div>{% endfor %}</div>
+{% else %}<div class="empty">No MCP interactions were observed in this time range.</div>{% endif %}</section>
+<p class="note">This view is administrator-only. Credential-shaped fields are redacted in the honeypot and again by the portal. It shows only content transmitted to MCP—not a model's hidden reasoning or unrelated conversation.</p>
+{% endif %}{% endblock %}

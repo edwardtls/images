@@ -19,6 +19,9 @@
 .security-table .tr small{display:block;overflow-wrap:anywhere}
 .security-table form{margin:0}
 .security-window{display:flex;flex-wrap:wrap;gap:8px;margin:-10px 0 22px}
+.security-tabs{display:flex;gap:8px;margin:-18px 0 28px;border-bottom:1px solid var(--line)}
+.security-tabs a{padding:10px 14px;border-bottom:3px solid transparent;color:var(--muted);font-weight:750;text-decoration:none}
+.security-tabs a:hover,.security-tabs a.active{border-color:#287a68;color:var(--ink)}
 .security-window a{padding:7px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font:700 11px ui-monospace,monospace;text-decoration:none}
 .security-window a:hover,.security-window a.active{background:var(--navy);border-color:var(--navy);color:#fff}
 .security-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}
@@ -45,5 +48,15 @@
 @media(max-width:430px){.security-metrics{grid-template-columns:1fr}.security-window{display:grid;grid-template-columns:1fr 1fr}.security-window a{text-align:center}.country-metric{grid-column:auto}}
 .compact{padding:7px 10px}
 .security-health{margin-top:28px}
+.mcp-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.mcp-metrics article small{display:block;color:#9fb1bb;font-size:10px;line-height:1.45;margin-top:4px}
+.mcp-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:34px}
+.mcp-summary h2{margin-top:0;font-size:18px}
+.mcp-table .tr{grid-template-columns:1.15fr 1.15fr 1fr .65fr 1.8fr;align-items:start;gap:12px}
+.mcp-table small{display:block;margin-top:3px;overflow-wrap:anywhere}
+.mcp-table details{max-width:100%}.mcp-table summary{cursor:pointer;font-weight:700}
+.mcp-payload{max-height:260px;margin:8px 0 0;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#edf0ed;padding:10px;font-size:10px}
+@media(max-width:900px){.mcp-summary{grid-template-columns:1fr}.mcp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:430px){.mcp-metrics{grid-template-columns:1fr}.security-tabs a{flex:1;text-align:center}}
 @media(max-width:760px){.danger-zone{grid-template-columns:1fr;padding:20px}.danger-zone button{width:100%}.facts div{gap:14px}.facts dd{text-align:right;overflow-wrap:anywhere}}
 @media(max-width:700px){.topology-grid{grid-template-columns:1fr}.choice-boxes.six{grid-template-columns:repeat(3,1fr)}}

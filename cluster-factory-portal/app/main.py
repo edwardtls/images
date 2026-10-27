@@ -22,7 +22,7 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import edge_security, kube
+from . import edge_security, kube, mcp_security
 from .security import (client_ip, csrf_token, current_user, groups, is_admin,
                        owner_id, require_admin, verify_csrf)
 
@@ -508,6 +508,24 @@ def security_dashboard():
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         app.logger.warning("edge security status failed", exc_info=True)
         return page("security.html", status={}, error=str(exc)[:200], window=window,
+                    windows=windows), 503
+
+
+@app.get("/security/mcp")
+def mcp_security_dashboard():
+    require_admin()
+    windows = (("3h", "Last 3 hours"), ("today", "Today"), ("24h", "Last 24 hours"),
+               ("3d", "Last 3 days"), ("7d", "Last week"), ("all", "Last 30 days"))
+    window = request.args.get("window", "today")
+    if window not in dict(windows):
+        abort(400, "Invalid security time window")
+    try:
+        status = mcp_security.status(window)
+        return page("security_mcp.html", status=status, error=None, window=window,
+                    windows=windows)
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+        app.logger.warning("MCP security status failed", exc_info=True)
+        return page("security_mcp.html", status={}, error=str(exc)[:200], window=window,
                     windows=windows), 503
 
 
