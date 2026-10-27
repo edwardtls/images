@@ -45,4 +45,4 @@ spec:
       - title: Cluster Git repository
         url: ${{ steps.provision.output.repositoryUrl }}
       - title: Argo CD application
-        url: https://argocd.apps.dev.d00s.org/applications/argocd/${{ steps.provision.output.applicationName }}
+        url: https://argo.apps.dev.d00s.org/applications/argocd/${{ steps.provision.output.applicationName }}
