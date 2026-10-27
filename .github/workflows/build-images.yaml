@@ -10,6 +10,7 @@ on:
       - openldap/**
       - cluster-factory-portal/**
       - backstage-factory/**
+      - mcp-honeypot/**
   schedule:
     - cron: "17 3 * * 0"
   workflow_dispatch:
@@ -52,6 +53,11 @@ jobs:
             dockerfile: Dockerfile
             version: 1.0.0
             image: harbor.apps.d00s.org/d00s/backstage-factory
+          - name: mcp-honeypot
+            context: mcp-honeypot
+            dockerfile: Dockerfile
+            version: 1.0.0
+            image: harbor.apps.d00s.org/d00s/mcp-honeypot
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,6 +87,8 @@ jobs:
             --local "dockerfile=${CONTEXT}" \
             --opt "filename=${DOCKERFILE}" \
             --opt platform=linux/amd64 \
+            --opt "build-arg:BUILD_DATE=${build_date}" \
+            --opt "build-arg:VCS_REF=${GITHUB_SHA}" \
             --no-cache \
             --opt attest:provenance=mode=max \
             --opt attest:sbom= \
