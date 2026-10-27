@@ -1,4 +1,4 @@
-"""Read bounded, sanitized MCP honeypot events from Loki."""
+"""Read bounded MCP honeypot evidence from Loki."""
 
 from __future__ import annotations
 
@@ -17,8 +17,6 @@ WINDOWS = {"3h": 3 * 3600, "24h": 24 * 3600, "3d": 3 * 86400,
            "7d": 7 * 86400, "all": 30 * 86400}
 MAX_EVENTS = 500
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-SENSITIVE_PARTS = ("password", "passwd", "secret", "token", "credential",
-                   "authorization", "cookie", "private_key", "api_key")
 
 
 def _bounds(window: str) -> tuple[dt.datetime, dt.datetime]:
@@ -32,18 +30,15 @@ def _bounds(window: str) -> tuple[dt.datetime, dt.datetime]:
     return now - dt.timedelta(seconds=WINDOWS[window]), now
 
 
-def _safe(value, *, key: str = "", depth: int = 0):
-    """Defensively redact Loki content again before rendering it."""
-    normalized = key.lower().replace("-", "_")
-    if any(part in normalized for part in SENSITIVE_PARTS):
-        return "[REDACTED]"
+def _bounded(value, *, key: str = "", depth: int = 0):
+    """Bound untrusted Loki content before rendering it."""
     if depth >= 6:
         return "[TRUNCATED]"
     if isinstance(value, dict):
-        return {str(k)[:80]: _safe(v, key=str(k), depth=depth + 1)
+        return {str(k)[:80]: _bounded(v, key=str(k), depth=depth + 1)
                 for k, v in list(value.items())[:50]}
     if isinstance(value, list):
-        return [_safe(item, depth=depth + 1) for item in value[:50]]
+        return [_bounded(item, depth=depth + 1) for item in value[:50]]
     if isinstance(value, str):
         return value[:2000]
     if value is None or isinstance(value, (bool, int, float)):
@@ -84,8 +79,8 @@ def _query(window: str) -> list[dict]:
             continue
         if event.get("event") != "mcp_request":
             continue
-        params = _safe(event.get("params") or {})
-        client = _safe(event.get("client_info") or {})
+        params = _bounded(event.get("params") or {})
+        client = _bounded(event.get("client_info") or {})
         tool = params.get("name", "") if isinstance(params, dict) else ""
         events.append({
             "timestamp": str(event.get("timestamp") or dt.datetime.fromtimestamp(
@@ -94,6 +89,7 @@ def _query(window: str) -> list[dict]:
             "source_fingerprint": str(event.get("source_fingerprint") or "—")[:80],
             "user_agent": str(event.get("user_agent") or "—")[:300],
             "origin": str(event.get("origin") or "—")[:300],
+            "request_target": str(event.get("request_target") or "/mcp")[:2048],
             "method": str(event.get("method") or "—")[:120],
             "tool": str(tool or "")[:120],
             "client": client,
@@ -102,6 +98,8 @@ def _query(window: str) -> list[dict]:
             "protocol": str(event.get("protocol_version") or event.get("mcp_protocol_header") or "—")[:80],
             "authorization_present": bool(event.get("authorization_present")),
             "authorization_scheme": str(event.get("authorization_scheme") or "")[:40],
+            "authorization": str(event.get("authorization") or "")[:4096],
+            "cookie": str(event.get("cookie") or "")[:4096],
             "params": params,
             "params_json": json.dumps(params, ensure_ascii=True, indent=2, sort_keys=True)[:12000],
         })

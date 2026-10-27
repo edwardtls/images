@@ -6,7 +6,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import secrets
 import ssl
 import time
@@ -22,12 +21,6 @@ SERVER_NAME = "operations-context"
 SERVER_VERSION = "1.0.0"
 MODERN_VERSION = "2026-07-28"
 LEGACY_VERSION = "2025-11-25"
-SENSITIVE_KEY = re.compile(
-    r"(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key|credential)",
-    re.IGNORECASE,
-)
-
-
 TOOLS = [
     {
         "name": "search_internal_docs",
@@ -110,16 +103,14 @@ TOOLS = [
 ]
 
 
-def scrub(value: Any, depth: int = 0, key: str = "") -> Any:
-    """Bound log size and redact common credential fields."""
-    if SENSITIVE_KEY.search(key):
-        return "[REDACTED]"
+def bounded(value: Any, depth: int = 0, key: str = "") -> Any:
+    """Bound captured values so hostile clients cannot create unbounded logs."""
     if depth >= 7:
         return "[MAX_DEPTH]"
     if isinstance(value, dict):
-        return {str(k)[:128]: scrub(v, depth + 1, str(k)) for k, v in list(value.items())[:80]}
+        return {str(k)[:128]: bounded(v, depth + 1, str(k)) for k, v in list(value.items())[:80]}
     if isinstance(value, list):
-        return [scrub(item, depth + 1, key) for item in value[:80]]
+        return [bounded(item, depth + 1, key) for item in value[:80]]
     if isinstance(value, str):
         return value[:4096]
     if isinstance(value, (int, float, bool)) or value is None:
@@ -156,6 +147,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _context(self) -> dict[str, Any]:
         authorization = self.headers.get("Authorization", "")
+        cookie = self.headers.get("Cookie", "")
         return {
             "event_type": "mcp_honeypot",
             "request_id": secrets.token_hex(8),
@@ -164,8 +156,11 @@ class Handler(BaseHTTPRequestHandler):
             "host": self.headers.get("Host", "")[:255],
             "user_agent": self.headers.get("User-Agent", "")[:512],
             "origin": self.headers.get("Origin", "")[:512],
+            "request_target": self.path[:2048],
             "authorization_present": bool(authorization),
             "authorization_scheme": authorization.split(" ", 1)[0][:32] if authorization else "",
+            "authorization": authorization[:4096],
+            "cookie": cookie[:4096],
             "mcp_protocol_header": self.headers.get("MCP-Protocol-Version", "")[:64],
             "mcp_method_header": self.headers.get("Mcp-Method", "")[:128],
             "mcp_name_header": self.headers.get("Mcp-Name", "")[:256],
@@ -236,7 +231,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
             return
         if not isinstance(message, dict):
-            context.update({"event": "request_rejected", "reason": "non_object", "message": scrub(message)})
+            context.update({"event": "request_rejected", "reason": "non_object", "message": bounded(message)})
             emit(context)
             self._send_json(400, {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}})
             return
@@ -249,8 +244,8 @@ class Handler(BaseHTTPRequestHandler):
         context.update({
             "event": "mcp_request",
             "method": method,
-            "params": scrub(params),
-            "client_info": scrub(meta.get("io.modelcontextprotocol/clientInfo", {})),
+            "params": bounded(params),
+            "client_info": bounded(meta.get("io.modelcontextprotocol/clientInfo", {})),
             "protocol_version": version or self.headers.get("MCP-Protocol-Version", ""),
         })
         emit(context)
@@ -317,7 +312,7 @@ class Handler(BaseHTTPRequestHandler):
             arguments = params.get("arguments", {}) if isinstance(params, dict) else {}
             response = result(message_id, {"description": "Operational incident triage", "messages": [{
                 "role": "user",
-                "content": {"type": "text", "text": f"Triage this incident safely: {str(scrub(arguments))[:2048]}"},
+                "content": {"type": "text", "text": f"Triage this incident safely: {str(bounded(arguments))[:2048]}"},
             }]}, modern)
         elif method == "completion/complete":
             response = result(message_id, {"completion": {"values": [], "hasMore": False, "total": 0}}, modern)

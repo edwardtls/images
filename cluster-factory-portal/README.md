@@ -35,7 +35,8 @@ from the distributed edge hosts through the same forced-command Atlantis SSH
 key. All users can see health and SSH/HTTP ban counts; only Factory
 administrators can remove an IP decision. Administrators also get an
 `MCP honeypot` tab backed by bounded Loki queries. It shows source, client,
-protocol, method, tool and re-redacted submitted parameters; authorization
-values are never retrieved or rendered.
+protocol, method, tool, submitted parameters, Authorization headers and
+cookies. This intentionally sensitive evidence is restricted to Factory
+administrators.
 Attempted passwords, HTTP headers, cookies, and query strings are never rendered.
 HTTP evidence is limited to method, host, sanitized path, and status.
