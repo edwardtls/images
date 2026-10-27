@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}Edge security · Factory{% endblock %}{% block content %}
 <section class="page-head"><div><div class="eyebrow">Distributed edge defence</div><h1>Edge activity</h1><p>SSH and RDP honeypot activity plus HTTP/S abuse decisions shared by Atlantis, Zion and Asguard.</p></div></section>
-<nav class="security-tabs" aria-label="Security views"><a href="/security" class="active" aria-current="page">Edge defence</a>{% if admin %}<a href="/security/mcp">MCP honeypot</a>{% endif %}</nav>
+<nav class="security-tabs" aria-label="Security views"><a href="/security" class="active" aria-current="page">Edge defence</a>{% if admin %}<a href="/security/mcp" data-mcp-tab>MCP honeypot<span class="mcp-unseen-dot" aria-hidden="true" hidden></span></a>{% endif %}</nav>
 {% if error %}<section class="warning"><strong>Security status is temporarily unavailable.</strong><span>{{ error }}</span></section>
 {% else %}
 <nav class="security-window" aria-label="Finding time range">

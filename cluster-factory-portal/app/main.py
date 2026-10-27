@@ -529,6 +529,17 @@ def mcp_security_dashboard():
                     windows=windows), 503
 
 
+@app.get("/api/security/mcp/latest")
+def mcp_security_latest():
+    require_admin()
+    try:
+        payload = {"cursor": mcp_security.latest_cursor()}
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError):
+        app.logger.warning("MCP latest-event check failed", exc_info=True)
+        abort(503, "MCP telemetry is temporarily unavailable")
+    return Response(json.dumps(payload), mimetype="application/json")
+
+
 @app.post("/security/bans/<address>/delete")
 def security_delete(address: str):
     require_admin(); values = form(); verify_csrf(values.get("csrf", ""))

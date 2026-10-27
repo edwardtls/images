@@ -46,7 +46,8 @@ def _bounded(value, *, key: str = "", depth: int = 0):
     return str(value)[:2000]
 
 
-def _query(window: str) -> list[dict]:
+def _query(window: str, *, limit: int = MAX_EVENTS) -> list[dict]:
+    limit = max(1, min(int(limit), MAX_EVENTS))
     start, end = _bounds(window)
     base = os.getenv("LOKI_QUERY_URL", "https://loki.d00s.org/loki/api/v1/query_range")
     target = urllib.parse.urlsplit(base)
@@ -57,7 +58,7 @@ def _query(window: str) -> list[dict]:
         "start": str(int(start.timestamp() * 1_000_000_000)),
         "end": str(int(end.timestamp() * 1_000_000_000)),
         "direction": "backward",
-        "limit": str(MAX_EVENTS),
+        "limit": str(limit),
     })
     request = urllib.request.Request(f"{base}?{query}", headers={"Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=10, context=ssl.create_default_context()) as response:
@@ -72,7 +73,7 @@ def _query(window: str) -> list[dict]:
         values.extend(stream.get("values", []))
     values.sort(key=lambda item: int(item[0]), reverse=True)
     events = []
-    for timestamp_ns, line in values[:MAX_EVENTS]:
+    for timestamp_ns, line in values[:limit]:
         try:
             event = json.loads(line)
         except (TypeError, json.JSONDecodeError):
@@ -83,6 +84,7 @@ def _query(window: str) -> list[dict]:
         client = _bounded(event.get("client_info") or {})
         tool = params.get("name", "") if isinstance(params, dict) else ""
         events.append({
+            "cursor": str(timestamp_ns),
             "timestamp": str(event.get("timestamp") or dt.datetime.fromtimestamp(
                 int(timestamp_ns) / 1_000_000_000, tz=dt.timezone.utc).isoformat()),
             "source_ip": str(event.get("source_ip") or "—")[:64],
@@ -104,6 +106,12 @@ def _query(window: str) -> list[dict]:
             "params_json": json.dumps(params, ensure_ascii=True, indent=2, sort_keys=True)[:12000],
         })
     return events
+
+
+def latest_cursor() -> str | None:
+    """Return an opaque cursor for the newest retained MCP interaction."""
+    events = _query("all", limit=1)
+    return events[0]["cursor"] if events else None
 
 
 def status(window: str) -> dict:

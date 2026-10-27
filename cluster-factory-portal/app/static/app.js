@@ -1,6 +1,35 @@
 document.querySelectorAll('[data-dialog]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.dialog).showModal()));
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));
 document.querySelectorAll('[data-confirm]').forEach(f=>f.addEventListener('submit',e=>{if(!confirm(f.dataset.confirm))e.preventDefault()}));
+
+const mcpTab=document.querySelector('[data-mcp-tab]');
+if(mcpTab){
+  const storageKey='factory:mcp:last-seen';
+  const dot=mcpTab.querySelector('.mcp-unseen-dot');
+  const setUnseen=unseen=>{dot.hidden=!unseen;mcpTab.classList.toggle('has-unseen',unseen);mcpTab.title=unseen?'New MCP honeypot activity':''};
+  const latest=async()=>{
+    const response=await fetch('/api/security/mcp/latest',{headers:{Accept:'application/json'},cache:'no-store'});
+    if(!response.ok)return null;
+    return (await response.json()).cursor;
+  };
+  if(mcpTab.hasAttribute('data-mcp-active')){
+    const rendered=mcpTab.dataset.mcpLatest;
+    if(rendered)localStorage.setItem(storageKey,rendered);
+    setUnseen(false);
+    latest().then(cursor=>{if(cursor)localStorage.setItem(storageKey,cursor)}).catch(()=>{});
+  }else{
+    const check=async()=>{
+      try{
+        const cursor=await latest();
+        if(!cursor){setUnseen(false);return}
+        const seen=localStorage.getItem(storageKey);
+        if(seen===null){localStorage.setItem(storageKey,cursor);setUnseen(false);return}
+        setUnseen(seen!==cursor);
+      }catch(_error){/* A telemetry outage must not disrupt the security page. */}
+    };
+    check();setInterval(check,30000);
+  }
+}
 const log=document.getElementById('log');
 if(log){
   const limit=3000;let lines=[],pending=[],received=false,flushTimer=null;

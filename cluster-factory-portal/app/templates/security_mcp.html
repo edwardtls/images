@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}MCP honeypot · Factory{% endblock %}{% block content %}
 <section class="page-head"><div><div class="eyebrow">Contained protocol decoy</div><h1>MCP activity</h1><p>Full bounded evidence sent to the isolated Model Context Protocol honeypot.</p></div></section>
-<nav class="security-tabs" aria-label="Security views"><a href="/security">Edge defence</a><a href="/security/mcp" class="active" aria-current="page">MCP honeypot</a></nav>
+<nav class="security-tabs" aria-label="Security views"><a href="/security">Edge defence</a><a href="/security/mcp" class="active" aria-current="page" data-mcp-tab data-mcp-active data-mcp-latest="{{ status.events[0].cursor if not error and status.events else '' }}">MCP honeypot<span class="mcp-unseen-dot" aria-hidden="true" hidden></span></a></nav>
 {% if error %}<section class="warning"><strong>MCP telemetry is temporarily unavailable.</strong><span>{{ error }}</span></section>
 {% else %}
 <nav class="security-window" aria-label="MCP event time range">

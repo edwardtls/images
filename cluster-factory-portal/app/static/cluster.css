@@ -22,6 +22,9 @@
 .security-tabs{display:flex;gap:8px;margin:-18px 0 28px;border-bottom:1px solid var(--line)}
 .security-tabs a{padding:10px 14px;border-bottom:3px solid transparent;color:var(--muted);font-weight:750;text-decoration:none}
 .security-tabs a:hover,.security-tabs a.active{border-color:#287a68;color:var(--ink)}
+.security-tabs a[data-mcp-tab]{position:relative}
+.mcp-unseen-dot{position:absolute;top:7px;right:3px;width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px var(--paper)}
+.mcp-unseen-dot[hidden]{display:none}
 .security-window a{padding:7px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font:700 11px ui-monospace,monospace;text-decoration:none}
 .security-window a:hover,.security-window a.active{background:var(--navy);border-color:var(--navy);color:#fff}
 .security-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}
