@@ -71,16 +71,12 @@ catalog:
     - type: file
       target: ./examples/entities.yaml
 
-    # Local example template
-    - type: file
-      target: ./examples/templates/namespace.yaml
+    # Git-managed software templates. The remote Location file controls which
+    # templates appear in Backstage without requiring an image rebuild.
+    - type: url
+      target: https://git.apps.d00s.org/factory/dev/src/branch/main/backstage/catalog-info.yaml
       rules:
-        - allow: [Template]
-
-    - type: file
-      target: ./examples/templates/database.yaml
-      rules:
-        - allow: [Template]
+        - allow: [Location, Template]
 
     # Local example organizational data
     - type: file
