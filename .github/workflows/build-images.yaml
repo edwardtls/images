@@ -20,7 +20,11 @@ permissions:
 
 concurrency:
   group: custom-images-${{ github.ref }}
-  cancel-in-progress: false
+  # A runner pod can disappear after GitHub has assigned a matrix job. In
+  # that case the run remains queued indefinitely and blocks every newer
+  # image revision. Images are immutable and only the newest revision is
+  # useful, so let a new run supersede the stale one.
+  cancel-in-progress: true
 
 jobs:
   build:
