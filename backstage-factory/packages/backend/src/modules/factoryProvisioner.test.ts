@@ -36,6 +36,7 @@ describe('factory manifest rendering', () => {
       instances: 3,
       storageSize: '10Gi',
       walStorageSize: '2Gi',
+      enablePodMonitor: true,
       postgresqlParameters: { max_connections: '80' },
     });
     expect(change.applicationName).toBe('database-handoff-ns-test-orders-db');
@@ -44,6 +45,8 @@ describe('factory manifest rendering', () => {
     );
     expect(change.files[0].content).toContain('instances: 3');
     expect(change.files[0].content).toContain('"max_connections": "80"');
+    expect(change.files[0].content).toContain('kind: PodMonitor');
+    expect(change.files[0].content).not.toContain('enablePodMonitor');
     expect(change.files[0].content).not.toContain('kind: Namespace');
   });
 

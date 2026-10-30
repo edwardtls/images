@@ -318,6 +318,25 @@ export function renderDatabase(request: DatabaseRequest): GeneratedChange {
   const postgresql = Object.keys(parameters).length
     ? `  postgresql:\n    parameters:\n${mapLines(parameters, 6)}\n`
     : '';
+  const podMonitor =
+    request.enablePodMonitor ?? true
+      ? `---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ${name}
+  namespace: ${namespace}
+  labels:
+    app.kubernetes.io/managed-by: backstage
+    d00s.org/owner: ${quoted(owner)}
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: ${name}
+  podMetricsEndpoints:
+    - port: metrics
+`
+      : '';
   const content = `apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -346,9 +365,7 @@ ${walStorage}  resources:
       memory: ${quoted(limitMemory)}
   affinity:
     podAntiAffinityType: ${request.antiAffinity ?? 'preferred'}
-  monitoring:
-    enablePodMonitor: ${request.enablePodMonitor ?? true}
-${postgresql}`;
+${postgresql}${podMonitor}`;
   return {
     applicationName: `database-${namespace}-${name}`,
     files: [
