@@ -441,6 +441,27 @@ async function fileExists(
   return true;
 }
 
+async function waitForBranch(
+  options: ForgejoOptions,
+  repoPath: string,
+  branch: string,
+): Promise<void> {
+  const endpoint = `${repoPath}/branches/${encodeURIComponent(branch)}`;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await fetch(`${options.apiUrl}${endpoint}`, {
+      headers: forgejoHeaders(options.token),
+    });
+    if (response.ok) return;
+    if (response.status !== 404) {
+      throw new Error(
+        `Forgejo branch readiness check failed (${response.status}) for ${branch}`,
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  throw new Error(`Forgejo branch ${branch} was not ready after 5 seconds`);
+}
+
 async function createPullRequest(
   options: ForgejoOptions,
   generated: GeneratedChange,
@@ -467,6 +488,10 @@ async function createPullRequest(
     }),
   });
   try {
+    // Forgejo can acknowledge branch creation before the content API can
+    // resolve the new ref. Wait for visibility so a transient race does not
+    // leave a failed scaffolder task.
+    await waitForBranch(options, repoPath, branch);
     for (const file of generated.files) {
       await forgejoRequest(
         options,
@@ -500,10 +525,7 @@ async function createPullRequest(
     return { url: pull.html_url, branch };
   } catch (error) {
     await fetch(
-      `${options.apiUrl}${repoPath}/branches/${branch
-        .split('/')
-        .map(encodeURIComponent)
-        .join('/')}`,
+      `${options.apiUrl}${repoPath}/branches/${encodeURIComponent(branch)}`,
       { method: 'DELETE', headers: forgejoHeaders(options.token) },
     );
     throw error;
