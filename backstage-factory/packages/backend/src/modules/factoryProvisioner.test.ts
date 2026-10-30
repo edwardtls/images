@@ -1,4 +1,8 @@
-import { renderDatabase, renderNamespace } from './factoryProvisioner';
+import {
+  buildBranchName,
+  renderDatabase,
+  renderNamespace,
+} from './factoryProvisioner';
 
 describe('factory manifest rendering', () => {
   beforeEach(() => {
@@ -55,5 +59,15 @@ describe('factory manifest rendering', () => {
         storageSize: '5Gi\nkind: Secret',
       }),
     ).toThrow(/quantity/);
+  });
+
+  it('keeps readable Forgejo branch names within a conservative limit', () => {
+    const branch = buildBranchName(
+      'database',
+      'backstage-handoff-test-a-very-long-postgresql-cluster-name',
+      '1234abcd',
+    );
+    expect(branch.length).toBeLessThanOrEqual(63);
+    expect(branch).toMatch(/^backstage\/database-backstage-handoff/);
   });
 });

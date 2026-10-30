@@ -60,6 +60,17 @@ type GeneratedChange = {
   files: Array<{ path: string; content: string }>;
 };
 
+export function buildBranchName(
+  kind: 'namespace' | 'database',
+  resourceName: string,
+  suffix: string,
+): string {
+  const fixedLength = `backstage/${kind}--${suffix}`.length;
+  const available = Math.max(1, 63 - fixedLength);
+  const resource = resourceName.slice(0, available).replace(/-+$/, '');
+  return `backstage/${kind}-${resource}-${suffix}`;
+}
+
 function quoted(value: string): string {
   return JSON.stringify(value);
 }
@@ -427,7 +438,7 @@ async function createPullRequest(
     }
   }
   const suffix = randomBytes(4).toString('hex');
-  const branch = `backstage/${kind}-${resourceName}-${suffix}`;
+  const branch = buildBranchName(kind, resourceName, suffix);
   const repoPath = `/repos/${encodeURIComponent(
     options.owner,
   )}/${encodeURIComponent(options.repo)}`;
