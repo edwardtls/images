@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}{{ document.title }} · Factory docs{% endblock %}{% block content %}
+<section class="page-head doc-head"><div><div class="eyebrow">{{ document.category }} · {{ document.location }}</div><h1>{{ document.title }}</h1><p>{{ document.summary }}</p></div><a class="secondary button" href="/docs">All documentation</a></section>
+<aside class="doc-source"><span>Canonical Git source</span><code>{{ document.source }}</code></aside>
+<article class="doc-content">{{ document.html }}</article>
+{% endblock %}

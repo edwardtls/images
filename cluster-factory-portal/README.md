@@ -28,6 +28,13 @@ The Kubernetes API integration uses the standard library with the mounted
 service-account CA and token. Keeping the runtime dependency set small makes
 the recurring image audit easier to review.
 
+The administrator-only documentation view reads a GitOps-generated ConfigMap.
+Canonical Markdown lives under `d00s/factory-docs`; the portal receives no Git
+or GitHub credential. Catalog entries and filenames are strictly validated and
+Mistune renders with raw HTML escaped and harmful URL schemes blocked. This
+keeps operational documentation reviewable in Git without turning the portal
+into a second documentation editor.
+
 Live job output is sent as bounded Server-Sent Event batches instead of one
 browser update per line. The viewer retains only the latest 3,000 lines and
 replaces that tail cleanly after a reconnect. An ownership-checked download

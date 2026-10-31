@@ -23,7 +23,7 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import edge_security, kube, mcp_security
+from . import documentation, edge_security, kube, mcp_security
 from .security import (can_manage_clusters, can_view_security, client_ip,
                        csrf_token, current_user, groups, is_admin, owner_id,
                        require_admin, require_clusters, require_security,
@@ -528,6 +528,35 @@ def job_stream(job_id: str):
 @app.get("/howto")
 def howto():
     current_user(); return page("howto.html")
+
+
+@app.get("/docs")
+def documentation_index():
+    require_admin()
+    try:
+        documents = documentation.catalog()
+        error = None
+    except (documentation.DocumentationError, kube.KubeError):
+        app.logger.warning("documentation catalog unavailable", exc_info=True)
+        documents = []
+        error = "The GitOps documentation bundle is temporarily unavailable"
+    categories: dict[str, list[dict]] = {}
+    for item in documents:
+        categories.setdefault(item["category"], []).append(item)
+    return page("docs.html", categories=categories, error=error)
+
+
+@app.get("/docs/<document_id>")
+def documentation_detail(document_id: str):
+    require_admin()
+    try:
+        document = documentation.document(document_id)
+    except (documentation.DocumentationError, kube.KubeError):
+        app.logger.warning("documentation entry unavailable", exc_info=True)
+        abort(503, "The GitOps documentation entry is temporarily unavailable")
+    if not document:
+        abort(404, "Documentation entry not found")
+    return page("doc.html", document=document)
 
 
 @app.get("/security")
