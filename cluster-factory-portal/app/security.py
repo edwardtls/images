@@ -5,8 +5,9 @@ import os
 import secrets
 from flask import abort, request, session
 
+from . import kube
 
-USER_GROUP = os.getenv("OIDC_USER_GROUP", "factory-users")
+
 ADMIN_GROUP = os.getenv("OIDC_ADMIN_GROUP", "factory-admins")
 
 
@@ -18,13 +19,41 @@ def current_user() -> dict:
     user = session.get("user")
     if not user:
         abort(401, "Authentication required")
-    if USER_GROUP not in groups(user) and ADMIN_GROUP not in groups(user):
+    if is_admin(user):
+        return user
+    access = kube.access_record(str(user.get("sub") or ""))
+    if not access or not access.get("approved"):
+        session.clear()
         abort(403, "Factory access has not been granted")
+    user["access"] = {key: bool(access.get(key)) for key in ("approved", "clusters", "security")}
+    session["user"] = user
     return user
 
 
 def is_admin(user: dict) -> bool:
     return ADMIN_GROUP in groups(user)
+
+
+def can_manage_clusters(user: dict) -> bool:
+    return is_admin(user) or bool(user.get("access", {}).get("clusters"))
+
+
+def can_view_security(user: dict) -> bool:
+    return is_admin(user) or bool(user.get("access", {}).get("security"))
+
+
+def require_clusters() -> dict:
+    user = current_user()
+    if not can_manage_clusters(user):
+        abort(403, "Cluster access has not been granted")
+    return user
+
+
+def require_security() -> dict:
+    user = current_user()
+    if not can_view_security(user):
+        abort(403, "Security access has not been granted")
+    return user
 
 
 def require_admin() -> dict:

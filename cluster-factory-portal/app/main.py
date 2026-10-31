@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import ipaddress
 import os
+import datetime as dt
 import smtplib
 import subprocess
 import base64
@@ -23,8 +24,10 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import edge_security, kube, mcp_security
-from .security import (client_ip, csrf_token, current_user, groups, is_admin,
-                       owner_id, require_admin, verify_csrf)
+from .security import (can_manage_clusters, can_view_security, client_ip,
+                       csrf_token, current_user, groups, is_admin, owner_id,
+                       require_admin, require_clusters, require_security,
+                       verify_csrf)
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ["SESSION_SECRET"]
@@ -95,6 +98,8 @@ def security_headers(response):
 def page(template: str, **extra):
     user = session.get("user")
     return render_template(template, user=user, admin=bool(user and is_admin(user)),
+                           can_clusters=bool(user and can_manage_clusters(user)),
+                           can_security=bool(user and can_view_security(user)),
                            csrf=csrf_token(), **extra)
 
 
@@ -189,21 +194,39 @@ def healthz():
 @app.get("/")
 def landing():
     if session.get("user"):
-        return redirect("/clusters", code=303)
+        return redirect("/dashboard", code=303)
     return page("landing.html")
 
 
-@app.get("/login")
-def login():
+def oidc_redirect(*, registration: bool = False):
     discovery = oidc_document("discovery")
     state = secrets.token_urlsafe(32); nonce = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
-    session["oidc"] = {"state": state, "nonce": nonce, "verifier": verifier, "created": int(time.time())}
+    session["oidc"] = {"state": state, "nonce": nonce, "verifier": verifier,
+                       "created": int(time.time()), "flow": "registration" if registration else "login"}
     params = {"client_id": os.environ["OIDC_CLIENT_ID"], "response_type": "code",
               "redirect_uri": os.environ["OIDC_REDIRECT_URI"], "scope": "openid profile email groups",
               "state": state, "nonce": nonce, "code_challenge": challenge, "code_challenge_method": "S256"}
-    return redirect(discovery["authorization_endpoint"] + "?" + urllib.parse.urlencode(params), code=302)
+    endpoint = discovery["authorization_endpoint"]
+    if registration:
+        endpoint = os.environ["OIDC_ISSUER"].rstrip("/") + "/protocol/openid-connect/registrations"
+    return redirect(endpoint + "?" + urllib.parse.urlencode(params), code=302)
+
+
+@app.get("/login")
+def login():
+    return oidc_redirect()
+
+
+@app.get("/signup")
+def signup():
+    return oidc_redirect(registration=True)
+
+
+@app.get("/pending")
+def pending_access():
+    return page("pending.html")
 
 
 @app.get("/auth/callback")
@@ -237,6 +260,7 @@ def callback():
             "iss": {"essential": True, "value": os.environ["OIDC_ISSUER"]},
             "aud": {"essential": True, "value": os.environ["OIDC_CLIENT_ID"]},
             "exp": {"essential": True},
+            "sub": {"essential": True},
             "nonce": {"essential": True, "value": pending["nonce"]},
         })
         claims.validate(leeway=60)
@@ -244,14 +268,20 @@ def callback():
         app.logger.warning("OIDC ID token validation failed", exc_info=True)
         abort(401, "Identity token validation failed")
     user = dict(claims)
-    allowed = {os.getenv("OIDC_USER_GROUP", "factory-users"),
-               os.getenv("OIDC_ADMIN_GROUP", "factory-admins")}
-    if not allowed & groups(user):
-        abort(403, "Your account has not been granted factory access")
+    if os.getenv("OIDC_ADMIN_GROUP", "factory-admins") not in groups(user):
+        access = kube.ensure_access_request(
+            user,
+            client_ip(),
+            legacy_user=os.getenv("OIDC_USER_GROUP", "factory-users") in groups(user),
+        )
+        if not access.get("approved"):
+            session.clear()
+            return redirect("/pending", code=303)
+        user["access"] = {key: bool(access.get(key)) for key in ("approved", "clusters", "security")}
     session.clear()
-    session["user"] = {key: user.get(key) for key in ("sub", "preferred_username", "groups")}
+    session["user"] = {key: user.get(key) for key in ("sub", "preferred_username", "groups", "access")}
     session.permanent = True; csrf_token()
-    return redirect("/clusters", code=303)
+    return redirect("/dashboard", code=303)
 
 
 @app.post("/logout")
@@ -260,9 +290,15 @@ def logout():
     return redirect("/", code=303)
 
 
+@app.get("/dashboard")
+def dashboard():
+    current_user()
+    return page("dashboard.html")
+
+
 @app.get("/clusters")
 def clusters():
-    user = current_user(); kube.reconcile()
+    user = require_clusters(); kube.reconcile()
     records = visible_records(user)
     return page("clusters.html", clusters=records, inventory=normalized_inventory(records),
                 jobs=kube.active_jobs(), quota=kube.quota_for(user))
@@ -270,13 +306,13 @@ def clusters():
 
 @app.get("/build")
 def build_form():
-    user = current_user()
+    user = require_clusters()
     return page("build.html", profiles=kube.profiles(), versions=kube.versions(), quota=kube.quota_for(user))
 
 
 @app.get("/clusters/<profile>")
 def cluster_detail(profile: str):
-    user = current_user()
+    user = require_clusters()
     record = next((item for item in visible_records(user) if item["profile"] == profile), None)
     if not record:
         abort(404, "Cluster not found")
@@ -286,7 +322,7 @@ def cluster_detail(profile: str):
 
 @app.post("/build")
 def build():
-    user = current_user(); values = form(); verify_csrf(values.get("csrf", ""))
+    user = require_clusters(); values = form(); verify_csrf(values.get("csrf", ""))
     profile = values.get("profile", "")
     if profile not in kube.profiles():
         abort(400, "Unknown profile")
@@ -342,7 +378,7 @@ def build():
 
 @app.post("/clusters/<profile>/delete")
 def delete_cluster(profile: str):
-    user = current_user(); values = form(); verify_csrf(values.get("csrf", ""))
+    user = require_clusters(); values = form(); verify_csrf(values.get("csrf", ""))
     retain_data = values.get("retain_data") == "on"
     record = next((item for item in kube.cluster_records() if item["profile"] == profile), None)
     if not record:
@@ -361,7 +397,7 @@ def delete_cluster(profile: str):
 
 @app.post("/clusters/delete-all")
 def delete_all_clusters():
-    user = current_user(); values = form(); verify_csrf(values.get("csrf", ""))
+    user = require_clusters(); values = form(); verify_csrf(values.get("csrf", ""))
     if values.get("confirm", "").strip() != "DELETE ALL":
         abort(400, "Type DELETE ALL to confirm bulk decommissioning")
     retain_data = values.get("retain_data") == "on"
@@ -396,7 +432,7 @@ def job_page(job_id: str):
 def authorized_operation(job_id: str) -> dict:
     if not kube.JOB_ID_RE.fullmatch(job_id):
         abort(404, "Job not found")
-    user = current_user()
+    user = require_clusters()
     try:
         job = kube.operation_for(job_id)
     except KeyError:
@@ -496,7 +532,7 @@ def howto():
 
 @app.get("/security")
 def security_dashboard():
-    current_user()
+    require_security()
     windows = (("3h", "Last 3 hours"), ("today", "Today"), ("24h", "Last 24 hours"),
                ("3d", "Last 3 days"), ("7d", "Last week"), ("all", "All"))
     window = request.args.get("window", "today")
@@ -583,8 +619,52 @@ def admin():
     audits.sort(key=lambda item: item.get("submitted_at", ""), reverse=True)
     blocks = kube.read_json_configmap("cluster-factory-security-status", "blocks.json",
                                       {"active": [], "history": []})
+    try:
+        access_users = kube.access_records()
+        access_error = None
+    except kube.KubeError:
+        app.logger.warning("Factory access review failed", exc_info=True)
+        access_users = []
+        access_error = "The Factory approval registry is temporarily unavailable"
     return page("admin.html", clusters=visible_records(user), audits=audits[:100], policy=kube.policy(),
-                inventory=kube.inventory(), blocks=blocks)
+                inventory=kube.inventory(), blocks=blocks, access_users=access_users,
+                access_error=access_error,
+                pending_users=sum(1 for item in access_users if not item.get("approved")))
+
+
+@app.post("/admin/users/<resource_name>/access")
+def admin_user_access(resource_name: str):
+    administrator = require_admin(); values = form(); verify_csrf(values.get("csrf", ""))
+    try:
+        changed = kube.update_access_record(
+            resource_name,
+            approved=values.get("approved") == "on",
+            clusters=values.get("clusters") == "on",
+            security=values.get("security") == "on",
+            administrator=administrator,
+        )
+    except (ValueError, KeyError, json.JSONDecodeError):
+        abort(400, "Invalid Factory access record")
+    except kube.KubeError:
+        app.logger.warning("Factory access update failed", exc_info=True)
+        abort(502, "The Factory approval registry rejected the update")
+    audit_id = secrets.token_hex(6)
+    kube.audit(audit_id, {
+        "schema": 1,
+        "job_id": audit_id,
+        "action": "access-update",
+        "profile": "identity",
+        "owner_sub": administrator["sub"],
+        "owner": administrator.get("preferred_username"),
+        "target_sub": changed["subject"],
+        "target_user": changed["username"],
+        "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "status": "succeeded",
+        "entitlements": {key: changed[key] for key in ("approved", "clusters", "security")},
+    })
+    app.logger.info("administrator %s updated Factory access for %s",
+                    administrator.get("preferred_username"), changed["username"])
+    return redirect("/admin?access=updated#access-control", code=303)
 
 
 @app.post("/admin/policy")

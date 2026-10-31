@@ -20,6 +20,7 @@ SSH_SECRET = os.getenv("SSH_SECRET", "cluster-factory-portal-ssh")
 SSH_CONFIG = os.getenv("SSH_CONFIG", "cluster-factory-expiry-ssh")
 TTL_RE = re.compile(r"^[1-9][0-9]*[hdw]$")
 JOB_ID_RE = re.compile(r"^[a-f0-9]{12}$")
+ACCESS_RESOURCE_RE = re.compile(r"^factory-access-[a-f0-9]{20}$")
 API = f"https://{os.environ.get('KUBERNETES_SERVICE_HOST', 'kubernetes.default.svc')}:{os.environ.get('KUBERNETES_SERVICE_PORT_HTTPS', '443')}"
 TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
@@ -119,6 +120,120 @@ def cluster_records() -> list[dict]:
         except (KeyError, json.JSONDecodeError):
             continue
     return records
+
+
+def access_resource_name(subject: str) -> str:
+    if not subject:
+        raise ValueError("Keycloak subject is required")
+    return "factory-access-" + hashlib.sha256(subject.encode()).hexdigest()[:20]
+
+
+def validated_access_record(configmap: dict, expected_subject: str | None = None) -> dict | None:
+    try:
+        record = json.loads(configmap["data"]["record.json"])
+        subject = record["subject"]
+        resource_name = configmap["metadata"]["name"]
+        if (record.get("schema") != 1 or not isinstance(subject, str) or not subject
+                or resource_name != access_resource_name(subject)
+                or (expected_subject is not None and subject != expected_subject)
+                or any(not isinstance(record.get(key), bool)
+                       for key in ("approved", "clusters", "security"))):
+            return None
+        record["resource_name"] = resource_name
+        return record
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def access_record(subject: str) -> dict | None:
+    try:
+        configmap = api("GET", ns_path("configmaps", access_resource_name(subject)))
+        return validated_access_record(configmap, subject)
+    except KubeError as exc:
+        if exc.status == 404:
+            return None
+        raise
+
+
+def access_records() -> list[dict]:
+    records = []
+    for configmap in labels("factory.d00s.org/type=access-record"):
+        record = validated_access_record(configmap)
+        if record:
+            records.append(record)
+    return sorted(records, key=lambda item: (
+        bool(item.get("approved")), str(item.get("requested_at", "")),
+        str(item.get("username", "")).lower()))
+
+
+def ensure_access_request(user: dict, source_ip: str, *, legacy_user: bool = False) -> dict:
+    existing = access_record(user["sub"])
+    if existing:
+        return existing
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    record = {
+        "schema": 1,
+        "subject": user["sub"],
+        "username": user.get("preferred_username") or "unknown",
+        "email": user.get("email") or "",
+        "source_ip": source_ip,
+        "requested_at": now,
+        "approved": legacy_user,
+        "clusters": legacy_user,
+        "security": legacy_user,
+        "updated_at": now if legacy_user else None,
+        "updated_by": "legacy-group-migration" if legacy_user else None,
+    }
+    name = access_resource_name(user["sub"])
+    body = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": name,
+            "namespace": NAMESPACE,
+            "labels": {
+                "factory.d00s.org/type": "access-record",
+                "factory.d00s.org/status": "approved" if legacy_user else "pending",
+            },
+        },
+        "data": {"record.json": json.dumps(record, sort_keys=True)},
+    }
+    try:
+        api("POST", ns_path("configmaps"), body)
+    except KubeError as exc:
+        if exc.status != 409:
+            raise
+        return access_record(user["sub"]) or record
+    record["resource_name"] = name
+    return record
+
+
+def update_access_record(resource_name: str, *, approved: bool, clusters: bool,
+                         security: bool, administrator: dict) -> dict:
+    if not ACCESS_RESOURCE_RE.fullmatch(resource_name):
+        raise ValueError("Invalid access record identifier")
+    configmap = api("GET", ns_path("configmaps", resource_name))
+    record = validated_access_record(configmap)
+    if not record or record["resource_name"] != resource_name:
+        raise ValueError("Invalid access record")
+    if not approved:
+        clusters = False
+        security = False
+    record.update({
+        "approved": approved,
+        "clusters": approved and clusters,
+        "security": approved and security,
+        "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "updated_by": administrator.get("preferred_username") or "factory-admin",
+    })
+    api("PATCH", ns_path("configmaps", resource_name), {
+        "metadata": {"labels": {
+            "factory.d00s.org/status": "approved" if approved else "pending",
+        }},
+        "data": {"record.json": json.dumps(record, sort_keys=True)},
+    }, content_type="application/merge-patch+json")
+    record["resource_name"] = resource_name
+    return record
 
 
 def quota_for(user: dict) -> int:

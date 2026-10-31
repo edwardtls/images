@@ -1,9 +1,10 @@
 # Cluster Factory Portal image
 
 Flask portal for the d00s disposable-cluster factory. Keycloak provides OIDC
-identity and group claims. Kubernetes Leases serialize each profile, Jobs own
-long-running operations, ConfigMaps retain audit/cluster records, and Atlantis
-continues to execute the existing Ansible playbooks.
+identity and verified-email self-registration. Kubernetes ConfigMaps retain
+pending approvals, independent cluster/security capabilities, audit data and
+cluster records. Leases serialize each profile, Jobs own long-running
+operations, and Atlantis continues to execute the existing Ansible playbooks.
 
 Runtime roles:
 
@@ -13,6 +14,15 @@ Runtime roles:
 
 The image contains no credentials. Vault Secrets Operator supplies the OIDC,
 SMTP, Harbor pull, and restricted SSH material at deployment time.
+
+New Keycloak accounts have no Factory access. Their first OIDC return creates a
+pending access record and ends the session. The Admin page can approve the
+record and independently grant owned-cluster operations or security-dashboard
+visibility. The access record is re-read on every authenticated request, so
+revocation is immediate. The portal receives no Keycloak administrative
+credential; `factory-admins` remains a direct Keycloak operation. Cluster
+records, jobs, logs and deletion actions remain restricted to their original
+Keycloak subject unless the viewer is an administrator.
 
 The Kubernetes API integration uses the standard library with the mounted
 service-account CA and token. Keeping the runtime dependency set small makes

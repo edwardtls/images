@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block title %}Approval pending · Factory{% endblock %}{% block content %}
+<section class="hero pending-access"><div class="eyebrow">Account created</div><h1>Access is waiting<br><em>for approval.</em></h1><p>Your identity exists in Keycloak, but no Factory data or actions are available yet. An administrator must approve the account and separately grant cluster or security access.</p><div class="hero-actions"><a class="button" href="/login">Check access</a><a class="secondary button" href="/">Return home</a></div><div class="trust"><span>No default permissions</span><span>Least privilege</span><span>Approval audited</span></div></section>
+{% endblock %}
