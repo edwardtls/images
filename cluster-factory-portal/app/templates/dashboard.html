@@ -4,6 +4,7 @@
   {% if can_clusters %}<article class="card"><div class="eyebrow">Cluster operations</div><h2>Disposable clusters</h2><p>Create clusters within your quota and manage only clusters and jobs owned by your Keycloak identity.</p><div class="actions"><a class="button" href="/build">New build</a><a class="secondary button" href="/clusters">My clusters</a></div></article>{% endif %}
   {% if can_security %}<article class="card"><div class="eyebrow">Read-only visibility</div><h2>Edge security</h2><p>Review SSH, RDP, HTTP/S and honeypot activity. Destructive firewall actions remain administrator-only.</p><a class="button" href="/security">Open security</a></article>{% endif %}
   {% if admin %}<article class="card"><div class="eyebrow">Administration</div><h2>Access approvals</h2><p>Review pending accounts and grant cluster and security capabilities independently.</p><a class="button" href="/admin#access-control">Review accounts</a></article>{% endif %}
+  {% if admin %}<article class="card"><div class="eyebrow">On-demand operations</div><h2>AI remediator</h2><p>Start a bounded analysis, enable issue monitoring, enter development mode, or stop all AI processes on Atlantis.</p><a class="button" href="/ai">Open AI controls</a></article>{% endif %}
   {% if not can_clusters and not can_security and not admin %}<article class="empty"><h2>No capabilities assigned</h2><p>Your account is approved, but an administrator has not granted cluster or security functionality yet.</p></article>{% endif %}
 </section>
 {% endblock %}

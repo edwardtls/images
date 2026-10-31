@@ -10,7 +10,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="{{ '/dashboard' if user else '/' }}"><span class="brand-mark">d0</span><span>Cluster Factory</span></a>
-    {% if user %}<nav aria-label="Primary navigation"><a href="/dashboard">Overview</a>{% if can_clusters %}<a href="/clusters">Clusters</a><a href="/build">New build</a>{% endif %}{% if can_security %}<a href="/security">Security</a>{% endif %}<a href="/howto">How it works</a>{% if admin %}<a href="/docs">Docs</a><a href="/admin">Admin</a>{% endif %}</nav>
+    {% if user %}<nav aria-label="Primary navigation"><a href="/dashboard">Overview</a>{% if can_clusters %}<a href="/clusters">Clusters</a><a href="/build">New build</a>{% endif %}{% if can_security %}<a href="/security">Security</a>{% endif %}<a href="/howto">How it works</a>{% if admin %}<a href="/ai">AI</a><a href="/docs">Docs</a><a href="/admin">Admin</a>{% endif %}</nav>
     <div class="identity"><span>{{ user.preferred_username }}</span><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Sign out</button></form></div>{% endif %}
   </header>
   <main>{% block content %}{% endblock %}</main>

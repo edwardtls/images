@@ -23,7 +23,7 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import documentation, edge_security, kube, mcp_security
+from . import ai_control, documentation, edge_security, kube, mcp_security
 from .lifecycle import lifecycle_history
 from .security import (can_manage_clusters, can_view_security, client_ip,
                        csrf_token, current_user, groups, is_admin, owner_id,
@@ -531,6 +531,35 @@ def job_stream(job_id: str):
 @app.get("/howto")
 def howto():
     current_user(); return page("howto.html")
+
+
+@app.get("/ai")
+def ai_dashboard():
+    require_admin()
+    try:
+        status = ai_control.command("status")
+        return page("ai.html", status=status, error=None)
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError,
+            subprocess.SubprocessError) as exc:
+        app.logger.warning("Atlantis AI status failed", exc_info=True)
+        return page("ai.html", status={}, error=str(exc)[:300]), 503
+
+
+@app.post("/ai/action")
+def ai_action():
+    administrator = require_admin(); values = form(); verify_csrf(values.get("csrf", ""))
+    action = values.get("action", "")
+    if action not in {"enable", "development", "scan", "stop"}:
+        abort(400, "Invalid AI control action")
+    try:
+        ai_control.command(action)
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError,
+            subprocess.SubprocessError):
+        app.logger.warning("Atlantis AI action failed", exc_info=True)
+        abort(502, "Atlantis did not accept the AI control action")
+    app.logger.info("administrator %s requested AI action %s",
+                    administrator.get("preferred_username"), action)
+    return redirect(f"/ai?action={urllib.parse.quote(action)}", code=303)
 
 
 @app.get("/docs")
