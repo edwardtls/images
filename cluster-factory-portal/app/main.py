@@ -24,6 +24,7 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import documentation, edge_security, kube, mcp_security
+from .lifecycle import lifecycle_history
 from .security import (can_manage_clusters, can_view_security, client_ip,
                        csrf_token, current_user, groups, is_admin, owner_id,
                        require_admin, require_clusters, require_security,
@@ -655,7 +656,8 @@ def admin():
         app.logger.warning("Factory access review failed", exc_info=True)
         access_users = []
         access_error = "The Factory approval registry is temporarily unavailable"
-    return page("admin.html", clusters=visible_records(user), audits=audits[:100], policy=kube.policy(),
+    return page("admin.html", clusters=visible_records(user), audits=audits[:100],
+                lifecycles=lifecycle_history(audits)[:250], policy=kube.policy(),
                 inventory=kube.inventory(), blocks=blocks, access_users=access_users,
                 access_error=access_error,
                 pending_users=sum(1 for item in access_users if not item.get("approved")))

@@ -1,5 +1,6 @@
 {% extends "base.html" %}{% block title %}Operations documentation · Factory{% endblock %}{% block content %}
 <section class="page-head"><div><div class="eyebrow">Admin-only runbooks</div><h1>Documentation</h1><p>Canonical operational documentation published from the private GitOps repository.</p></div></section>
+<a class="architecture-preview" href="/docs/architecture"><img src="/static/infrastructure.svg" alt="d00s infrastructure overview showing public entry points, routing, Kubernetes, Proxmox and storage"><span><strong>Infrastructure map</strong><small>Open the linked detailed architecture and traffic-flow view.</small></span></a>
 {% if error %}<aside class="warning"><strong>Documentation unavailable.</strong><span>{{ error }}</span></aside>{% endif %}
 {% for category, documents in categories.items() %}<section class="docs-category"><div class="section-head"><div><div class="eyebrow">{{ category }}</div><h2>{{ category }}</h2></div><span class="status">{{ documents|length }} documents</span></div><div class="grid docs-grid">
 {% for document in documents %}<a class="card doc-card" href="/docs/{{ document.id }}"><div class="eyebrow">{{ document.location }}</div><h3>{{ document.title }}</h3><p>{{ document.summary }}</p><small class="mono">{{ document.source }}</small></a>{% endfor %}

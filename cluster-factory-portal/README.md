@@ -35,6 +35,13 @@ Mistune renders with raw HTML escaped and harmful URL schemes blocked. This
 keeps operational documentation reviewable in Git without turning the portal
 into a second documentation editor.
 
+The Docs landing page includes a lightweight clickable SVG architecture map.
+The map links public edges, routing, Kubernetes, identity, Proxmox/Ceph,
+storage and source systems to their canonical runbooks. The Admin page also
+correlates retained create/delete audits into cluster lifecycles, showing the
+owner, requested TTL, expected expiry, actual decommission and late or failed
+cleanup without adding a second audit database.
+
 Live job output is sent as bounded Server-Sent Event batches instead of one
 browser update per line. The viewer retains only the latest 3,000 lines and
 replaces that tail cleanly after a reconnect. An ownership-checked download
