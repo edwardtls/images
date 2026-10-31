@@ -57,7 +57,8 @@ def enforce() -> None:
 def hard_stop() -> None:
     state = ai_control._state()
     ai_control.stop()
-    _email("D00S AI nightly shutdown", f"The mandatory 23:00 shutdown stopped mode {state.get('mode', 'off')}.")
+    if state.get("mode") != "off":
+        _email("D00S AI nightly shutdown", f"The mandatory 23:00 shutdown stopped mode {state.get('mode')}.")
 
 
 def main() -> None:
