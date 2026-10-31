@@ -540,8 +540,8 @@ def ai_dashboard():
         status = ai_control.command("status")
         return page("ai.html", status=status, error=None)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError,
-            subprocess.SubprocessError) as exc:
-        app.logger.warning("Atlantis AI status failed", exc_info=True)
+            subprocess.SubprocessError, kube.KubeError) as exc:
+        app.logger.warning("Kubernetes AI status failed", exc_info=True)
         return page("ai.html", status={}, error=str(exc)[:300]), 503
 
 
@@ -549,14 +549,14 @@ def ai_dashboard():
 def ai_action():
     administrator = require_admin(); values = form(); verify_csrf(values.get("csrf", ""))
     action = values.get("action", "")
-    if action not in {"enable", "development", "scan", "stop"}:
+    if action not in {"enable", "development", "stay", "scan", "stop"}:
         abort(400, "Invalid AI control action")
     try:
         ai_control.command(action)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError,
-            subprocess.SubprocessError):
-        app.logger.warning("Atlantis AI action failed", exc_info=True)
-        abort(502, "Atlantis did not accept the AI control action")
+            subprocess.SubprocessError, kube.KubeError):
+        app.logger.warning("Kubernetes AI action failed", exc_info=True)
+        abort(502, "Kubernetes did not accept the AI control action")
     app.logger.info("administrator %s requested AI action %s",
                     administrator.get("preferred_username"), action)
     return redirect(f"/ai?action={urllib.parse.quote(action)}", code=303)

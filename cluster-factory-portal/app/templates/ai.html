@@ -1,17 +1,19 @@
 {% extends "base.html" %}{% block title %}AI operations · Factory{% endblock %}{% block content %}
 <section class="page-head"><div><div class="eyebrow">Power-conscious operations</div><h1>AI operations</h1><p>On-demand cluster triage with constrained database-backup remediation.</p></div><a class="secondary button" href="/ai">Refresh status</a></section>
-{% if error %}<div class="warning"><strong>Atlantis AI is unavailable</strong><span>{{ error }}</span></div>{% else %}
+{% if error %}<div class="warning"><strong>Kubernetes AI runtime is unavailable</strong><span>{{ error }}</span></div>{% else %}
 <section class="metrics ai-metrics">
   <article><span>Mode</span><strong>{{ status.mode|title }}</strong></article>
   <article><span>Model</span><strong>{{ status.model }}</strong><small>{{ status.model_memory }}</small></article>
-  <article><span>Monitor timer</span><strong>{{ status.timer }}</strong><small>{{ 'enabled after reboot' if status.timer_enabled else 'disabled' }}</small></article>
+  <article><span>Schedule</span><strong>{{ status.timer }}</strong><small>06:00 daily · 23:00 hard stop</small></article>
   <article><span>Current scan</span><strong>{{ status.scan }}</strong></article>
 </section>
+{% if status.deadline %}<div class="notice"><strong>Automatic shutdown</strong> This session is scheduled to stop at <span class="mono">{{ status.deadline }}</span>.</div>{% endif %}
 <section class="grid ai-controls">
-  <article class="panel"><h2>Monitoring mode</h2><p>A lightweight ten-minute timer checks Kubernetes state. The model starts only when an issue is found and stops after the run.</p><form method="post" action="/ai/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="enable"><button>Enable monitoring</button></form></article>
-  <article class="panel"><h2>Development mode</h2><p>Keep the isolated model pod running on a Kubernetes worker for development. It is network restricted and strictly resource limited.</p><form method="post" action="/ai/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="development"><button>Start development mode</button></form></article>
-  <article class="panel"><h2>Analyze now</h2><p>Run one bounded cluster scan immediately. This does not permanently enable monitoring.</p><form method="post" action="/ai/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="scan"><button>Run analysis</button></form></article>
-  <article class="panel danger-panel"><h2>Stop everything</h2><p>Disable the timer and stop the current scan and model. No AI process remains running.</p><form method="post" action="/ai/action" data-confirm="Stop AI monitoring, inference and any running analysis?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="stop"><button class="danger-solid">Stop everything</button></form></article>
+  <article class="panel"><h2>Monitoring mode</h2><p>Start the model and a bounded scan now. It shuts down after two hours unless extended by policy.</p><form method="post" action="/ai/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="enable"><button>Enable for 2 hours</button></form></article>
+  <article class="panel"><h2>Development mode</h2><p>Keep the isolated model pod available for two hours without running a scan.</p><form method="post" action="/ai/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="development"><button>Develop for 2 hours</button></form></article>
+  <article class="panel"><h2>Stay running</h2><p>Keep the model available without a session deadline. The mandatory 23:00 shutdown still applies.</p><form method="post" action="/ai/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="stay"><button>Run until 23:00</button></form></article>
+  <article class="panel"><h2>Analyze now</h2><p>Run one bounded cluster scan immediately, email the result, and stop the model after completion.</p><form method="post" action="/ai/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="scan"><button>Run analysis</button></form></article>
+  <article class="panel danger-panel"><h2>Stop everything</h2><p>Stop the current scan and scale the model to zero. The 06:00 daily schedule remains configured.</p><form method="post" action="/ai/action" data-confirm="Stop AI inference and any running analysis?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="stop"><button class="danger-solid">Stop everything</button></form></article>
 </section>
 <section class="panel ai-result"><div class="section-head"><div><h2>Last analysis</h2><p>Model decisions are advisory except for the two validated backup runbooks.</p></div>{% if status.last_run %}<span class="status {{ 'ready' if status.last_run.state == 'completed' else '' }}">{{ status.last_run.state }}</span>{% endif %}</div>
 {% if status.last_run %}
