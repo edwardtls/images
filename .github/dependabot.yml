@@ -24,6 +24,14 @@ updates:
       time: "04:30"
       timezone: Europe/Amsterdam
     open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /refoss-exporter
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:32"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
   - package-ecosystem: github-actions
     directory: /
     schedule:

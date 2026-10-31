@@ -33,6 +33,17 @@ manifest to promote a build; no mutable `latest` tag is deployed.
 See [`backup-image/README.md`](backup-image/README.md) for image-specific
 details.
 
+## Refoss/Tasmota power exporter
+
+`refoss-exporter/` builds `harbor.apps.d00s.org/d00s/refoss-exporter`. One
+non-root process collects the fixed, GitOps-managed outlet inventory and
+exports compatible Tasmota power metrics. It uses only Python's standard
+library, accepts no caller-supplied target, and replaces the legacy pod per
+outlet deployment from Docker Hub.
+
+See [`refoss-exporter/README.md`](refoss-exporter/README.md) for configuration
+and security details.
+
 ## OpenLDAP image
 
 `openldap/` builds OpenLDAP 2.6.15 LTS directly from the checksum-verified
