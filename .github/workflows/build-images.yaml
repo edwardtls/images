@@ -66,7 +66,7 @@ jobs:
           - name: refoss-exporter
             context: refoss-exporter
             dockerfile: Dockerfile
-            version: 2.0.0
+            version: 2.0.1
             image: harbor.apps.d00s.org/d00s/refoss-exporter
     steps:
       - name: Check out source

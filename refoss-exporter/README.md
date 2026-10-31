@@ -13,6 +13,8 @@ Prometheus scrape.
 The runtime:
 
 - uses only the Python standard library;
+- removes the unused pip, setuptools, and vendored package installer modules
+  from the runtime image;
 - runs as UID/GID 65532;
 - contains no package manager dependencies or credentials;
 - is built weekly with an SBOM and provenance attestation;

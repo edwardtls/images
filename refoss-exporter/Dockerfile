@@ -9,7 +9,10 @@ LABEL org.opencontainers.image.title="d00s Refoss/Tasmota exporter" \
       org.opencontainers.image.source="https://github.com/edwardtls/images/tree/main/refoss-exporter"
 
 RUN addgroup -S -g 65532 nonroot \
-    && adduser -S -D -H -u 65532 -G nonroot nonroot
+    && adduser -S -D -H -u 65532 -G nonroot nonroot \
+    && rm -rf /usr/local/lib/python3.14/site-packages/pip* \
+              /usr/local/lib/python3.14/ensurepip \
+              /usr/local/bin/pip*
 
 WORKDIR /app
 COPY --chown=65532:65532 exporter.py /app/exporter.py
