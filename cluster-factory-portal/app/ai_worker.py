@@ -18,6 +18,8 @@ from . import ai_control, kube
 BACKUP_NS = "backup"
 MODEL_URL = os.getenv("AI_MODEL_URL", "http://d00s-ai-model.factory.svc.cluster.local:11434/api/chat")
 MODEL_TAGS_URL = MODEL_URL.rsplit("/", 1)[0] + "/tags"
+ALERTS_PATH = ("/api/v1/namespaces/monitoring/services/"
+               "http:d00s-kube-prometheus-stack-alertmanager:9093/proxy/api/v2/alerts")
 
 
 def _items(path: str, query: dict | None = None) -> list[dict]:
@@ -112,13 +114,28 @@ def _health() -> tuple[list[str], dict]:
             bad_pods.append(f"{namespace}/{pod['metadata']['name']}:{reasons[0]}")
     if bad_pods:
         findings.append("Unhealthy pods: " + ", ".join(bad_pods[:25]))
+    alerts = []
+    try:
+        for alert in kube.api("GET", ALERTS_PATH):
+            labels = alert.get("labels", {})
+            status = alert.get("status", {})
+            name = labels.get("alertname", "unknown")
+            if status.get("state") == "active" and name != "Watchdog":
+                alerts.append({"name": name, "severity": labels.get("severity", "unknown"),
+                               "namespace": labels.get("namespace"),
+                               "summary": alert.get("annotations", {}).get("summary", "")[:240]})
+        if alerts:
+            findings.append("Firing alerts: " + ", ".join(
+                f"{item['name']}[{item['severity']}]" for item in alerts[:25]))
+    except kube.KubeError as exc:
+        findings.append(f"Alertmanager query failed with Kubernetes API status {exc.status}")
     return findings, {"nodes": len(nodes), "pods": len(pods), "bad_nodes": bad_nodes,
-                      "bad_pods": bad_pods[:25]}
+                      "bad_pods": bad_pods[:25], "alerts": alerts[:25]}
 
 
 def _advisory(summary: dict) -> dict:
     body = json.dumps({
-        "model": "qwen3.5:2b", "stream": False,
+        "model": "qwen3.5:2b", "stream": False, "think": False,
         "messages": [{"role": "system", "content":
                       "You are a Kubernetes incident advisor. Return compact JSON with severity, summary and findings. Never propose destructive actions."},
                      {"role": "user", "content": json.dumps(summary, separators=(",", ":"))}],
@@ -192,15 +209,17 @@ def main() -> None:
                                   "summary": "Cluster scan completed", "findings": findings},
         "actions": actions, "error": error,
     }
-    state = ai_control._write_state({"last_run": last_run, "current_job": None})
     lines = [f"State: {last_run['state']}", "", "Findings:"] + ([f"- {item}" for item in findings] or ["- none"])
     lines += ["", "Validated actions:"] + ([f"- {a['runbook']}: {a['target']} ({a['detail']})" for a in actions] or ["- none"])
     if error:
         lines += ["", "Error:", error]
     try:
         _email(f"D00S AI cluster scan: {last_run['state']}", "\n".join(lines))
-    except Exception:
-        pass
+        last_run["email"] = "sent"
+    except Exception as exc:
+        last_run["email"] = f"failed: {type(exc).__name__}"
+        findings.append(f"Email delivery failed: {type(exc).__name__}")
+    state = ai_control._write_state({"last_run": last_run, "current_job": None})
     if state.get("mode") == "scan":
         ai_control._scale(0)
         ai_control._write_state({"mode": "off", "deadline": None, "current_job": None})
