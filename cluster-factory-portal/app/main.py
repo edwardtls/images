@@ -79,6 +79,8 @@ def enforce_host_and_form_type():
     allowed = {item.strip() for item in os.getenv("ALLOWED_HOSTS", "factory.apps.d00s.org").split(",")}
     if request.host.split(":", 1)[0] not in allowed:
         abort(400, "Invalid host")
+    if request.path == "/static/infrastructure.svg":
+        require_admin()
     if request.method in {"POST", "PUT", "PATCH"} and request.mimetype != "application/x-www-form-urlencoded":
         abort(415, "Only URL-encoded forms are accepted")
 
