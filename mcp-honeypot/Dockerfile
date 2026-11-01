@@ -8,7 +8,9 @@ LABEL org.opencontainers.image.title="d00s MCP honeypot" \
       org.opencontainers.image.revision="$VCS_REF"
 
 RUN addgroup -S -g 65532 nonroot \
-    && adduser -S -D -H -u 65532 -G nonroot nonroot
+    && adduser -S -D -H -u 65532 -G nonroot nonroot \
+    && python -m pip uninstall -y msgpack setuptools urllib3 \
+    && rm -rf /root/.cache /usr/local/lib/python*/site-packages/pip
 
 WORKDIR /app
 COPY --chown=65532:65532 server.py /app/server.py
