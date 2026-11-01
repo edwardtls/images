@@ -1,5 +1,6 @@
 {% extends "base.html" %}{% block title %}{{ document.title }} · Factory docs{% endblock %}{% block content %}
-<section class="page-head doc-head"><div><div class="eyebrow">{{ document.category }} · {{ document.location }}</div><h1>{{ document.title }}</h1><p>{{ document.summary }}</p></div><a class="secondary button" href="/docs">All documentation</a></section>
+<section class="page-head doc-head"><div><div class="eyebrow">{{ document.category }} · {{ document.location }}</div><h1>{{ document.title }}</h1><p>{{ document.summary }}</p></div><div class="actions">{% if document.parent_document %}<a class="secondary button" href="/docs/{{ document.parent_document.id }}">{{ document.parent_document.title }}</a>{% endif %}<a class="secondary button" href="/docs">All documentation</a></div></section>
 <aside class="doc-source"><span>Canonical Git source</span><code>{{ document.source }}</code></aside>
+{% if document.children %}<nav class="doc-related" aria-label="Application details"><strong>Application details</strong>{% for child in document.children %}<a href="/docs/{{ child.id }}">{{ child.title }}</a>{% endfor %}</nav>{% endif %}
 <article class="doc-content">{{ document.html }}</article>
 {% endblock %}

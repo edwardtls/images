@@ -573,8 +573,14 @@ def documentation_index():
         documents = []
         error = "The GitOps documentation bundle is temporarily unavailable"
     categories: dict[str, list[dict]] = {}
+    children: dict[str, list[dict]] = {}
     for item in documents:
-        categories.setdefault(item["category"], []).append(item)
+        if item.get("parent"):
+            children.setdefault(item["parent"], []).append(item)
+    for item in documents:
+        if not item.get("parent"):
+            item = {**item, "children": children.get(item["id"], [])}
+            categories.setdefault(item["category"], []).append(item)
     return page("docs.html", categories=categories, error=error)
 
 
