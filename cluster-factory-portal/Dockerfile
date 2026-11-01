@@ -1,4 +1,4 @@
-FROM python:3.13.9-alpine3.22@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413f31026c3856e5911618b1 AS audit
+FROM python:3.14.5-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd AS audit
 
 WORKDIR /audit
 COPY requirements.txt /audit/requirements.txt
@@ -7,7 +7,7 @@ RUN apk upgrade --no-cache \
     && pip-audit --requirement /audit/requirements.txt \
     && touch /audit/passed
 
-FROM python:3.13.9-alpine3.22@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413f31026c3856e5911618b1 AS runtime
+FROM python:3.14.5-alpine3.22@sha256:6b91e66ab2a880ce9ca5a1b91c70f45963ff71ff68268df056336e1a657d5efd AS runtime
 
 COPY --from=audit /audit/passed /audit-passed
 
