@@ -1,6 +1,38 @@
 version: 2
 updates:
   - package-ecosystem: docker
+    directory: /cluster-factory-portal
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:05"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
+  - package-ecosystem: pip
+    directory: /cluster-factory-portal
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:10"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /backstage-factory
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:12"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
+  - package-ecosystem: npm
+    directory: /backstage-factory
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:14"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
     directory: /backup-image
     schedule:
       interval: weekly
