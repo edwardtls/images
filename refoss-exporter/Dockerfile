@@ -1,4 +1,4 @@
-FROM python:3.14.10-alpine3.23@sha256:a191e12d3545c23fa0d6d646dd5dcec3ff0b2e8bbc8746db2badad2dcaaa5cc7
+FROM python:3.15.0-alpine3.23@sha256:d64bc17e0dff27c5c4a31f616450d032aa73d6325855127ce3a305bf1384c8d5
 
 ARG BUILD_DATE
 ARG VCS_REF
