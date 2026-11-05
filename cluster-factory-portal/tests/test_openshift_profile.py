@@ -19,9 +19,10 @@ class OpenShiftProfileTests(unittest.TestCase):
     def test_accepts_the_supported_shape(self):
         self.assertIsNone(kube.openshift_request_error(3, 2, "ceph", 672))
         self.assertIsNone(kube.openshift_request_error(3, 6, "ceph", 24))
+        self.assertIsNone(kube.openshift_request_error(1, 2, "ceph", 24))
 
     def test_rejects_unsupported_shapes(self):
-        for request in ((1, 3, "ceph", 24), (5, 3, "ceph", 24), (3, 1, "ceph", 24),
+        for request in ((1, 1, "ceph", 24), (1, 3, "ceph", 24), (1, 2, "nfs", 24), (5, 3, "ceph", 24), (3, 1, "ceph", 24),
                         (3, 3, "nfs", 24), (3, 3, "both", 24), (3, 3, "ceph", 673)):
             self.assertIsNotNone(kube.openshift_request_error(*request), request)
 
