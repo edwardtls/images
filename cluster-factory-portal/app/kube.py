@@ -99,8 +99,8 @@ def visible_profiles(admin: bool) -> dict:
 
 
 def openshift_request_error(control_planes: int, workers: int, storage: str, ttl_hours: int) -> str | None:
-    if control_planes != 3 or not 2 <= workers <= 6:
-        return "OpenShift requires 3 control planes and 2 to 6 workers"
+    if not ((control_planes == 3 and 2 <= workers <= 6) or (control_planes, workers) == (1, 2)):
+        return "OpenShift requires 3 control planes and 2 to 6 workers, or 1 control plane and 2 workers"
     if storage != "ceph":
         return "OpenShift requires Ceph storage"
     if ttl_hours > OPENSHIFT_MAX_TTL_HOURS:
