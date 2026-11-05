@@ -9,7 +9,9 @@ RUN find packages \! -name package.json -mindepth 2 -maxdepth 2 -exec rm -rf {} 
 FROM node:24-trixie-slim AS build
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev python3 make g++ && \
+    apt-get -o Acquire::Retries=0 update && \
+    apt-get -o Acquire::Retries=0 install -y --only-upgrade apt && \
+    apt-get install -y --no-install-recommends libsqlite3-dev python3 make g++ && \
     rm -rf /var/lib/apt/lists/*
 USER node
 WORKDIR /app
@@ -27,7 +29,9 @@ RUN mkdir packages/backend/dist/skeleton packages/backend/dist/bundle && \
 FROM node:24-trixie-slim AS production-deps
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev python3 make g++ && \
+    apt-get -o Acquire::Retries=0 update && \
+    apt-get -o Acquire::Retries=0 install -y --only-upgrade apt && \
+    apt-get install -y --no-install-recommends libsqlite3-dev python3 make g++ && \
     rm -rf /var/lib/apt/lists/*
 USER node
 WORKDIR /app
@@ -41,7 +45,9 @@ RUN --mount=type=cache,target=/home/node/.cache/yarn,sharing=locked,uid=1000,gid
 FROM node:24-trixie-slim
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends libsqlite3-0 && \
+    apt-get -o Acquire::Retries=0 update && \
+    apt-get -o Acquire::Retries=0 install -y --only-upgrade apt && \
+    apt-get install -y --no-install-recommends libsqlite3-0 && \
     rm -rf /var/lib/apt/lists/*
 USER node
 WORKDIR /app

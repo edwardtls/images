@@ -3,7 +3,8 @@ FROM debian:13-slim AS builder
 ARG OPENLDAP_VERSION=2.6.15
 ARG OPENLDAP_SHA3_512=77627844339d7a23e80f24a1aa95cbd5c919d9b17066b1ab506322dc1787415817cf0509c7b4fe44670cc643ad61c19395b650f01802d6dd7f73e865dc70d97a
 
-RUN apt-get update \
+RUN apt-get -o Acquire::Retries=0 update \
+    && apt-get -o Acquire::Retries=0 install --yes --only-upgrade apt \
     && apt-get install --yes --no-install-recommends \
         build-essential \
         ca-certificates \
@@ -53,7 +54,8 @@ LABEL org.opencontainers.image.source="https://github.com/edwardtls/images"
 LABEL org.opencontainers.image.description="Minimal non-root OpenLDAP ${OPENLDAP_VERSION} LTS runtime"
 LABEL org.opencontainers.image.version="${OPENLDAP_VERSION}"
 
-RUN apt-get update \
+RUN apt-get -o Acquire::Retries=0 update \
+    && apt-get -o Acquire::Retries=0 install --yes --only-upgrade apt \
     && apt-get upgrade --yes \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
