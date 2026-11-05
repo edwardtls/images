@@ -310,7 +310,7 @@ def clusters():
 @app.get("/build")
 def build_form():
     user = require_clusters()
-    return page("build.html", profiles=kube.profiles(), versions=kube.versions(), quota=kube.quota_for(user))
+    return page("build.html", profiles=kube.visible_profiles(is_admin(user)), versions=kube.versions(), quota=kube.quota_for(user))
 
 
 @app.get("/clusters/<profile>")
@@ -327,8 +327,12 @@ def cluster_detail(profile: str):
 def build():
     user = require_clusters(); values = form(); verify_csrf(values.get("csrf", ""))
     profile = values.get("profile", "")
-    if profile not in kube.profiles():
+    profile_config = kube.profiles().get(profile)
+    if profile_config is None:
         abort(400, "Unknown profile")
+    if profile_config.get("admin_only") and not is_admin(user):
+        abort(403, "This profile is limited to administrators")
+    openshift = profile_config.get("platform") == "openshift"
     owned = [record for record in kube.cluster_records() if record.get("owner_sub") == user["sub"]]
     pending = [job for job in kube.active_jobs()
                if job["metadata"]["labels"].get("factory.d00s.org/owner") == owner_id(user)]
@@ -357,6 +361,12 @@ def build():
         abort(400, "Topology values must be integers")
     if control_planes not in {1, 3, 5} or workers not in {1, 2, 3, 4, 5, 6}:
         abort(400, "Requested topology is outside the supported range")
+    if openshift:
+        error = kube.openshift_request_error(control_planes, workers, values.get("storage", "nfs"), ttl_hours)
+        if error:
+            abort(400, error)
+    else:
+        selected_versions.pop("openshift", None)
     request_data = {
         "name": profile, "profile": profile,
         "portal_owner": user.get("preferred_username", "factory-user"),

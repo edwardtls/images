@@ -19,6 +19,7 @@ WORKER_IMAGE = os.environ["WORKER_IMAGE"]
 SSH_SECRET = os.getenv("SSH_SECRET", "cluster-factory-portal-ssh")
 SSH_CONFIG = os.getenv("SSH_CONFIG", "cluster-factory-expiry-ssh")
 TTL_RE = re.compile(r"^[1-9][0-9]*[hdw]$")
+OPENSHIFT_MAX_TTL_HOURS = 672
 JOB_ID_RE = re.compile(r"^[a-f0-9]{12}$")
 ACCESS_RESOURCE_RE = re.compile(r"^factory-access-[a-f0-9]{20}$")
 API = f"https://{os.environ.get('KUBERNETES_SERVICE_HOST', 'kubernetes.default.svc')}:{os.environ.get('KUBERNETES_SERVICE_PORT_HTTPS', '443')}"
@@ -91,6 +92,20 @@ def versions() -> dict:
 
 def profiles() -> dict:
     return json.loads(api("GET", ns_path("configmaps", "cluster-factory-portal-config"))["data"]["profiles.json"])
+
+
+def visible_profiles(admin: bool) -> dict:
+    return {name: config for name, config in profiles().items() if admin or not config.get("admin_only")}
+
+
+def openshift_request_error(control_planes: int, workers: int, storage: str, ttl_hours: int) -> str | None:
+    if control_planes != 3 or not 2 <= workers <= 6:
+        return "OpenShift requires 3 control planes and 2 to 6 workers"
+    if storage != "ceph":
+        return "OpenShift requires Ceph storage"
+    if ttl_hours > OPENSHIFT_MAX_TTL_HOURS:
+        return "OpenShift TTL is limited to 4 weeks"
+    return None
 
 
 def terminal(job: dict) -> bool:
@@ -480,8 +495,9 @@ def reconcile() -> None:
                     "created_at": record["completed_at"],
                     "expires_at": (dt.datetime.now(dt.timezone.utc) + delta).isoformat(),
                     "url": test_url, "test_url": test_url,
-                    "argocd_url": f"https://argo.apps.{profile_config['domain']}",
-                    "forgejo_url": f"https://git.apps.d00s.org/factory/{profile}",
+                    "argocd_url": profile_config.get("argocd_url", f"https://argo.apps.{profile_config['domain']}"),
+                    **({} if profile_config.get("platform") == "openshift"
+                       else {"forgejo_url": f"https://git.apps.d00s.org/factory/{profile}"}),
                     "request": record["request"], "managed_by_portal": True}
                 body = {"apiVersion": "v1", "kind": "ConfigMap",
                         "metadata": {"name": cluster_name, "namespace": NAMESPACE,
