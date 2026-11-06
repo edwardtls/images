@@ -17,13 +17,14 @@ import urllib.parse
 import urllib.request
 from email.message import EmailMessage
 
+import psycopg
 from authlib.jose import jwt
 from authlib.jose.errors import JoseError
 from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import ai_control, documentation, edge_security, kube, mcp_security
+from . import ai_control, documentation, edge_security, kube, security_store
 from .lifecycle import lifecycle_history
 from .security import (can_manage_clusters, can_view_security, client_ip,
                        csrf_token, current_user, groups, is_admin, owner_id,
@@ -613,41 +614,56 @@ def security_dashboard():
     windows = (("3h", "Last 3 hours"), ("today", "Today"), ("24h", "Last 24 hours"),
                ("3d", "Last 3 days"), ("7d", "Last week"), ("all", "All"))
     window = request.args.get("window", "today")
+    view = request.args.get("view", "edge")
     if window not in dict(windows):
         abort(400, "Invalid security time window")
+    if view not in {"edge", "mcp"}:
+        abort(400, "Invalid security view")
+    if view == "mcp":
+        require_admin()
     try:
-        status = edge_security.status(window)
-        return page("security.html", status=status, error=None, window=window, windows=windows)
-    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
-        app.logger.warning("edge security status failed", exc_info=True)
-        return page("security.html", status={}, error=str(exc)[:200], window=window,
-                    windows=windows), 503
+        status = security_store.mcp_status(window) if view == "mcp" else security_store.edge_status(window)
+        partial = render_template(f"_security_{view}.html", status=status, error=None,
+                                  window=window, admin=is_admin(current_user()), csrf=csrf_token())
+        return page("security.html", partial=partial, view=view, window=window, windows=windows)
+    except (RuntimeError, ValueError, psycopg.Error) as exc:
+        app.logger.warning("database security status failed", exc_info=True)
+        partial = render_template(f"_security_{view}.html", status={}, error=str(exc)[:200],
+                                  window=window, admin=is_admin(current_user()), csrf=csrf_token())
+        return page("security.html", partial=partial, view=view, window=window, windows=windows), 503
 
 
 @app.get("/security/mcp")
 def mcp_security_dashboard():
     require_admin()
-    windows = (("3h", "Last 3 hours"), ("today", "Today"), ("24h", "Last 24 hours"),
-               ("3d", "Last 3 days"), ("7d", "Last week"), ("all", "Last 30 days"))
+    query = urllib.parse.urlencode({"view": "mcp", "window": request.args.get("window", "today")})
+    return redirect(f"/security?{query}", code=302)
+
+
+@app.get("/api/security/view")
+def security_view():
+    require_security()
+    view = request.args.get("view", "edge")
     window = request.args.get("window", "today")
-    if window not in dict(windows):
-        abort(400, "Invalid security time window")
+    if view not in {"edge", "mcp"} or window not in {"3h", "today", "24h", "3d", "7d", "all"}:
+        abort(400, "Invalid security view")
+    if view == "mcp":
+        require_admin()
     try:
-        status = mcp_security.status(window)
-        return page("security_mcp.html", status=status, error=None, window=window,
-                    windows=windows)
-    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
-        app.logger.warning("MCP security status failed", exc_info=True)
-        return page("security_mcp.html", status={}, error=str(exc)[:200], window=window,
-                    windows=windows), 503
+        status = security_store.mcp_status(window) if view == "mcp" else security_store.edge_status(window)
+    except (RuntimeError, ValueError, psycopg.Error):
+        app.logger.warning("database security partial failed", exc_info=True)
+        abort(503, "Security telemetry is temporarily unavailable")
+    return render_template(f"_security_{view}.html", status=status, error=None,
+                           window=window, admin=is_admin(current_user()), csrf=csrf_token())
 
 
 @app.get("/api/security/mcp/latest")
 def mcp_security_latest():
     require_admin()
     try:
-        payload = {"cursor": mcp_security.latest_cursor()}
-    except (OSError, RuntimeError, ValueError, json.JSONDecodeError):
+        payload = {"cursor": security_store.latest_mcp_cursor()}
+    except (RuntimeError, ValueError, psycopg.Error):
         app.logger.warning("MCP latest-event check failed", exc_info=True)
         abort(503, "MCP telemetry is temporarily unavailable")
     return Response(json.dumps(payload), mimetype="application/json")
