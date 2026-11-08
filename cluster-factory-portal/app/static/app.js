@@ -99,7 +99,23 @@ const securityContent=document.getElementById('security-content');
 if(securityContent){
   const tabs=document.querySelector('[data-security-tabs]');
   const windows=document.querySelector('[data-security-windows]');
+  // Vulnerabilities is a third view of this page (static/vulns.js), so every
+  // tab switch happens in place.
+  const vulnsPane=document.getElementById('vulns-pane');
+  const markTab=view=>tabs.querySelectorAll('[data-security-nav]').forEach(link=>{
+    const active=link.dataset.view===view;link.classList.toggle('active',active);
+    if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
+  });
+  const showPane=vulns=>{securityContent.hidden=vulns;windows.hidden=vulns;if(vulnsPane)vulnsPane.hidden=!vulns};
+  const openVulns=(path,{history=true}={})=>{
+    if(!vulnsPane||!window.factoryVulns)return false;
+    showPane(true);markTab('vulns');
+    window.factoryVulns.open(path,{history});
+    return true;
+  };
   const loadSecurity=async(view,range,{history=true}={})=>{
+    if(view==='vulns'&&openVulns('/security/vulnerabilities',{history}))return;
+    showPane(false);
     securityContent.setAttribute('aria-busy','true');
     try{
       const query=new URLSearchParams({view,window:range});
@@ -107,9 +123,8 @@ if(securityContent){
       if(!response.ok)throw new Error(`Security telemetry returned ${response.status}`);
       securityContent.innerHTML=await response.text();
       securityContent.dataset.view=view;securityContent.dataset.window=range;
-      tabs.querySelectorAll('[data-security-nav]').forEach(link=>{
-        const active=link.dataset.view===view;link.classList.toggle('active',active);
-        if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
+      markTab(view);
+      tabs.querySelectorAll('[data-security-nav]:not([data-view="vulns"])').forEach(link=>{
         const target=new URL(link.href);target.searchParams.set('window',range);link.href=target.pathname+target.search;
       });
       windows.querySelectorAll('[data-security-nav]').forEach(link=>{
@@ -132,6 +147,9 @@ if(securityContent){
     event.preventDefault();
     loadSecurity(link.dataset.view||securityContent.dataset.view,link.dataset.window||securityContent.dataset.window);
   });
-  window.addEventListener('popstate',()=>{const query=new URLSearchParams(location.search);loadSecurity(query.get('view')||'edge',query.get('window')||'today',{history:false})});
+  window.addEventListener('popstate',()=>{
+    if(location.pathname.startsWith('/security/vulnerabilities')&&openVulns(location.pathname,{history:false}))return;
+    const query=new URLSearchParams(location.search);loadSecurity(query.get('view')||'edge',query.get('window')||'today',{history:false});
+  });
   initSecurityChart(securityContent);
 }

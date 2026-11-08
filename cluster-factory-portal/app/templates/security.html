@@ -1,12 +1,17 @@
-{% extends "base.html" %}{% block title %}Security · Factory{% endblock %}{% block content %}
-<section class="page-head"><div><div class="eyebrow">Distributed security telemetry</div><h1>Security activity</h1><p>Five-year, database-backed edge and MCP honeypot evidence.</p></div></section>
+{% extends "base.html" %}{% block title %}{{ 'Vulnerabilities' if view == 'vulns' else 'Security' }} · Factory{% endblock %}{% block content %}
+<section class="page-head"><div><div class="eyebrow">Distributed security telemetry</div><h1>Security activity</h1><p>Five-year, database-backed edge and MCP honeypot evidence{% if admin %}, and the software and vulnerabilities on every system{% endif %}.</p></div></section>
 <nav class="security-tabs" aria-label="Security views" data-security-tabs>
   <a href="/security?view=edge&amp;window={{ window }}" data-security-nav data-view="edge" class="{{ 'active' if view == 'edge' else '' }}"{% if view == 'edge' %} aria-current="page"{% endif %}>Edge defence</a>
   {% if admin %}<a href="/security?view=mcp&amp;window={{ window }}" data-security-nav data-view="mcp" data-mcp-tab class="{{ 'active' if view == 'mcp' else '' }}"{% if view == 'mcp' %} aria-current="page" data-mcp-active{% endif %}>MCP honeypot<span class="mcp-unseen-dot" aria-hidden="true" hidden></span></a>
-  <a href="/security/vulnerabilities">Vulnerabilities</a>{% endif %}
+  <a href="/security/vulnerabilities" data-security-nav data-view="vulns" class="{{ 'active' if view == 'vulns' else '' }}"{% if view == 'vulns' %} aria-current="page"{% endif %}>Vulnerabilities</a>{% endif %}
 </nav>
-<nav class="security-window" aria-label="Finding time range" data-security-windows>
-  {% for value, label in windows %}<a href="/security?view={{ view }}&amp;window={{ value }}" data-security-nav data-window="{{ value }}" class="{{ 'active' if window == value else '' }}"{% if window == value %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+<nav class="security-window" aria-label="Finding time range" data-security-windows{% if view == 'vulns' %} hidden{% endif %}>
+  {% for value, label in windows %}<a href="/security?view={{ 'edge' if view == 'vulns' else view }}&amp;window={{ value }}" data-security-nav data-window="{{ value }}" class="{{ 'active' if window == value else '' }}"{% if window == value %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
 </nav>
-<div id="security-content" data-view="{{ view }}" data-window="{{ window }}" aria-live="polite">{{ partial|safe }}</div>
+<div id="security-content" data-view="{{ 'edge' if view == 'vulns' else view }}" data-window="{{ window }}" aria-live="polite"{% if view == 'vulns' %} hidden data-empty{% endif %}>{{ partial|safe }}</div>
+{% if admin %}<div id="vulns-pane"{% if view != 'vulns' %} hidden{% endif %}>
+<div id="vulns" data-view="{{ vuln_view or 'overview' }}" data-id="{{ identifier or '' }}" aria-live="polite"><div class="empty">Loading the latest report…</div></div>
+<p class="note">Severity comes from the distribution or advisory that published the vulnerability. “Known exploited” means it is on the CISA list of vulnerabilities exploited in the wild; EPSS is the estimated chance of exploitation in the next 30 days. Container image software is read once per image digest.</p>
+</div>{% endif %}
 {% endblock %}
+{% block scripts %}{% if admin %}<script src="/static/vulns.js" defer></script>{% endif %}{% endblock %}
