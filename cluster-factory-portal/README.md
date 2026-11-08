@@ -26,9 +26,13 @@ Keycloak subject unless the viewer is an administrator.
 
 Security > Vulnerabilities (administrators only) shows the report from the
 twice-daily scan in `ansible/vulnscan/` of the k8s repository: systems, their
-software, and the vulnerabilities that affect them. The portal reads the
-report through the restricted dispatcher's read-only `vulns` commands, and
-`static/vulns.js` renders it and checks for a newer report every minute.
+software, and the vulnerabilities that affect them. Pods and Docker
+containers are entries of their own, by cluster and namespace, because a pod
+can run on any node. The security collector CronJob checks the restricted
+dispatcher for a new report (`vulns latest`) and copies it into the security
+database (`vulns export`, table `vuln_documents`) in one transaction. The
+pages read the stored JSON from there, and `static/vulns.js` renders it and
+polls `/api/security/vulnerabilities/status` every minute.
 
 The Kubernetes API integration uses the standard library with the mounted
 service-account CA and token. Keeping the runtime dependency set small makes

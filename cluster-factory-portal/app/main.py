@@ -682,23 +682,33 @@ def vulnerabilities_dashboard(view: str = "", identifier: str = ""):
                 identifier=identifier)
 
 
+@app.get("/api/security/vulnerabilities/status")
+def vulnerabilities_status():
+    require_admin()
+    try:
+        payload = vulnerabilities.status()
+    except vulnerabilities.NotFound:
+        abort(503, "No vulnerability report has been imported yet")
+    except (RuntimeError, psycopg.Error):
+        app.logger.warning("vulnerability report status unavailable", exc_info=True)
+        abort(503, "The vulnerability report is temporarily unavailable")
+    return Response(json.dumps(payload), mimetype="application/json")
+
+
 @app.get("/api/security/vulnerabilities")
 @app.get("/api/security/vulnerabilities/<kind>/<identifier>")
 def vulnerabilities_api(kind: str = "", identifier: str = ""):
     require_admin()
     try:
-        if not kind:
-            payload = vulnerabilities.overview()
-        else:
-            payload = vulnerabilities.detail(kind, identifier)
+        payload = vulnerabilities.detail(kind, identifier) if kind else vulnerabilities.overview()
     except ValueError:
         abort(404)
     except vulnerabilities.NotFound:
         abort(404, "Not in the latest vulnerability report")
-    except (OSError, RuntimeError, subprocess.SubprocessError):
+    except (RuntimeError, psycopg.Error):
         app.logger.warning("vulnerability report unavailable", exc_info=True)
         abort(503, "The vulnerability report is temporarily unavailable")
-    return Response(json.dumps(payload), mimetype="application/json")
+    return Response(payload, mimetype="application/json")
 
 
 @app.post("/security/bans/<address>/delete")
