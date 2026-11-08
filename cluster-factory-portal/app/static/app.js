@@ -1,6 +1,6 @@
 document.querySelectorAll('[data-dialog]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.dialog).showModal()));
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));
-document.querySelectorAll('[data-confirm]').forEach(f=>f.addEventListener('submit',e=>{if(!confirm(f.dataset.confirm))e.preventDefault()}));
+document.addEventListener('submit',e=>{const f=e.target.closest('[data-confirm]');if(f&&!confirm(f.dataset.confirm))e.preventDefault()});
 
 const mcpTab=document.querySelector('[data-mcp-tab]');
 if(mcpTab){
@@ -12,23 +12,18 @@ if(mcpTab){
     if(!response.ok)return null;
     return (await response.json()).cursor;
   };
-  if(mcpTab.hasAttribute('data-mcp-active')){
-    const rendered=mcpTab.dataset.mcpLatest;
-    if(rendered)localStorage.setItem(storageKey,rendered);
-    setUnseen(false);
-    latest().then(cursor=>{if(cursor)localStorage.setItem(storageKey,cursor)}).catch(()=>{});
-  }else{
-    const check=async()=>{
-      try{
-        const cursor=await latest();
-        if(!cursor){setUnseen(false);return}
-        const seen=localStorage.getItem(storageKey);
-        if(seen===null){localStorage.setItem(storageKey,cursor);setUnseen(false);return}
-        setUnseen(seen!==cursor);
-      }catch(_error){/* A telemetry outage must not disrupt the security page. */}
-    };
-    check();setInterval(check,30000);
-  }
+  const check=async()=>{
+    try{
+      const cursor=await latest();
+      if(!cursor){setUnseen(false);return}
+      const content=document.getElementById('security-content');
+      if(content&&content.dataset.view==='mcp'){localStorage.setItem(storageKey,cursor);setUnseen(false);return}
+      const seen=localStorage.getItem(storageKey);
+      if(seen===null){localStorage.setItem(storageKey,cursor);setUnseen(false);return}
+      setUnseen(seen!==cursor);
+    }catch(_error){/* A telemetry outage must not disrupt the security page. */}
+  };
+  check();setInterval(check,30000);
 }
 const log=document.getElementById('log');
 if(log){
@@ -44,8 +39,9 @@ if(log){
   source.onerror=()=>{document.getElementById('job-state').textContent='Reconnecting…'};
 }
 
-const securityChart=document.getElementById('security-trend-chart');
-if(securityChart){
+const initSecurityChart=(root=document)=>{
+  const securityChart=root.querySelector('#security-trend-chart');
+  if(!securityChart)return;
   const trend=JSON.parse(securityChart.dataset.trend);
   const points=trend.points||[];
   const tooltip=securityChart.parentElement.querySelector('.security-chart-tooltip');
@@ -97,4 +93,45 @@ if(securityChart){
   securityChart.addEventListener('pointermove',showPoint);securityChart.addEventListener('pointerdown',showPoint);
   securityChart.addEventListener('pointerleave',()=>{tooltip.hidden=true});
   new ResizeObserver(draw).observe(securityChart);draw();
+};
+
+const securityContent=document.getElementById('security-content');
+if(securityContent){
+  const tabs=document.querySelector('[data-security-tabs]');
+  const windows=document.querySelector('[data-security-windows]');
+  const loadSecurity=async(view,range,{history=true}={})=>{
+    securityContent.setAttribute('aria-busy','true');
+    try{
+      const query=new URLSearchParams({view,window:range});
+      const response=await fetch(`/api/security/view?${query}`,{headers:{Accept:'text/html'},cache:'no-store'});
+      if(!response.ok)throw new Error(`Security telemetry returned ${response.status}`);
+      securityContent.innerHTML=await response.text();
+      securityContent.dataset.view=view;securityContent.dataset.window=range;
+      tabs.querySelectorAll('[data-security-nav]').forEach(link=>{
+        const active=link.dataset.view===view;link.classList.toggle('active',active);
+        if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
+        const target=new URL(link.href);target.searchParams.set('window',range);link.href=target.pathname+target.search;
+      });
+      windows.querySelectorAll('[data-security-nav]').forEach(link=>{
+        const active=link.dataset.window===range;link.classList.toggle('active',active);
+        if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
+        const target=new URL(link.href);target.searchParams.set('view',view);link.href=target.pathname+target.search;
+      });
+      if(view==='mcp'){
+        const marker=securityContent.querySelector('[data-mcp-latest]');
+        if(marker&&marker.dataset.mcpLatest)localStorage.setItem('factory:mcp:last-seen',marker.dataset.mcpLatest);
+        const dot=document.querySelector('.mcp-unseen-dot');if(dot)dot.hidden=true;
+      }
+      initSecurityChart(securityContent);
+      if(history)window.history.pushState({view,range},'',`/security?${query}`);
+    }catch(error){const warning=document.createElement('section');warning.className='warning';const strong=document.createElement('strong');strong.textContent='Security telemetry is temporarily unavailable.';const detail=document.createElement('span');detail.textContent=error.message;warning.append(strong,detail);securityContent.replaceChildren(warning)}
+    finally{securityContent.removeAttribute('aria-busy')}
+  };
+  document.addEventListener('click',event=>{
+    const link=event.target.closest('[data-security-nav]');if(!link)return;
+    event.preventDefault();
+    loadSecurity(link.dataset.view||securityContent.dataset.view,link.dataset.window||securityContent.dataset.window);
+  });
+  window.addEventListener('popstate',()=>{const query=new URLSearchParams(location.search);loadSecurity(query.get('view')||'edge',query.get('window')||'today',{history:false})});
+  initSecurityChart(securityContent);
 }

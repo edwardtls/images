@@ -14,9 +14,10 @@ from zoneinfo import ZoneInfo
 
 LOKI_QUERY = '{k8s_namespace_name="mcp-honeypot"} | json | event="mcp_request"'
 WINDOWS = {"3h": 3 * 3600, "24h": 24 * 3600, "3d": 3 * 86400,
-           "7d": 7 * 86400, "all": 30 * 86400}
+           "7d": 7 * 86400, "all": 5 * 366 * 86400}
 MAX_EVENTS = 500
-MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_QUERY_EVENTS = 5000
+MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
 
 def _bounds(window: str) -> tuple[dt.datetime, dt.datetime]:
@@ -47,7 +48,7 @@ def _bounded(value, *, key: str = "", depth: int = 0):
 
 
 def _query(window: str, *, limit: int = MAX_EVENTS) -> list[dict]:
-    limit = max(1, min(int(limit), MAX_EVENTS))
+    limit = max(1, min(int(limit), MAX_QUERY_EVENTS))
     start, end = _bounds(window)
     base = os.getenv("LOKI_QUERY_URL", "https://loki.d00s.org/loki/api/v1/query_range")
     target = urllib.parse.urlsplit(base)
@@ -112,6 +113,11 @@ def latest_cursor() -> str | None:
     """Return an opaque cursor for the newest retained MCP interaction."""
     events = _query("all", limit=1)
     return events[0]["cursor"] if events else None
+
+
+def events(window: str, *, limit: int = MAX_EVENTS) -> list[dict]:
+    """Return normalized bounded events for durable ingestion."""
+    return _query(window, limit=limit)
 
 
 def status(window: str) -> dict:
