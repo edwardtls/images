@@ -9,8 +9,8 @@ import subprocess
 VALID_WINDOWS = {"3h", "today", "24h", "3d", "7d", "all"}
 
 
-def _command(*parts: str) -> dict:
-    command = [
+def ssh_command(*parts: str) -> list[str]:
+    return [
         "ssh", "-F", "/dev/null", "-p", os.getenv("EDGE_SSH_PORT", "2200"),
         "-i", os.getenv("EDGE_SSH_KEY", "/ssh/id_ed25519"),
         "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
@@ -18,7 +18,10 @@ def _command(*parts: str) -> dict:
         "-o", f"UserKnownHostsFile={os.getenv('EDGE_SSH_KNOWN_HOSTS', '/ssh-config/known_hosts')}",
         os.getenv("EDGE_SSH_TARGET", "edward@192.168.31.254"), *parts,
     ]
-    result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=20)
+
+
+def _command(*parts: str) -> dict:
+    result = subprocess.run(ssh_command(*parts), check=True, capture_output=True, text=True, timeout=20)
     document = json.loads(result.stdout)
     if not isinstance(document, dict):
         raise RuntimeError("edge security command returned an invalid response")

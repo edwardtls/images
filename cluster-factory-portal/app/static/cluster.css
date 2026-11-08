@@ -73,6 +73,10 @@
 .vuln-systems .tr{grid-template-columns:1.4fr 1.3fr .9fr .9fr 1.2fr;align-items:center}
 .vuln-findings .tr{grid-template-columns:1.3fr .9fr 1.2fr 1fr 1.3fr;align-items:center}
 .vuln-affected .tr{grid-template-columns:1.2fr 1.3fr 1fr 1.4fr;align-items:center}
+.vuln-affected-pods .tr{grid-template-columns:1.3fr 1fr 1.1fr .8fr 1.5fr}
+.vuln-kind{display:inline-flex;padding:2px 7px;border-radius:4px;font:700 10px ui-monospace,monospace;text-transform:uppercase;background:#dce3e5;color:var(--ink);vertical-align:middle}
+.vuln-kind.pod{background:#cfe0f5;color:#163d6b}
+.vuln-kind.container{background:#e5dcf3;color:#3e2569}
 .vuln-software .tr{grid-template-columns:2fr 1.4fr .6fr;padding:7px 16px}
 .vuln-software,.vuln-findings{margin-top:10px}
 .vuln-severity{display:inline-flex;padding:3px 8px;border-radius:20px;font:700 11px ui-monospace,monospace;text-transform:uppercase;background:#dce3e5;color:var(--ink)}
