@@ -24,7 +24,7 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import ai_control, documentation, edge_security, kube, security_store
+from . import ai_control, documentation, edge_security, kube, security_store, vulnerabilities
 from .lifecycle import lifecycle_history
 from .security import (can_manage_clusters, can_view_security, client_ip,
                        csrf_token, current_user, groups, is_admin, owner_id,
@@ -666,6 +666,38 @@ def mcp_security_latest():
     except (RuntimeError, ValueError, psycopg.Error):
         app.logger.warning("MCP latest-event check failed", exc_info=True)
         abort(503, "MCP telemetry is temporarily unavailable")
+    return Response(json.dumps(payload), mimetype="application/json")
+
+
+VULNERABILITY_VIEWS = {"systems": "system", "vulnerabilities": "vulnerability"}
+
+
+@app.get("/security/vulnerabilities")
+@app.get("/security/vulnerabilities/<view>/<identifier>")
+def vulnerabilities_dashboard(view: str = "", identifier: str = ""):
+    require_admin()
+    if view and (view not in VULNERABILITY_VIEWS or not vulnerabilities.IDENTIFIER.fullmatch(identifier)):
+        abort(404)
+    return page("security_vulns.html", view=VULNERABILITY_VIEWS.get(view, "overview"),
+                identifier=identifier)
+
+
+@app.get("/api/security/vulnerabilities")
+@app.get("/api/security/vulnerabilities/<kind>/<identifier>")
+def vulnerabilities_api(kind: str = "", identifier: str = ""):
+    require_admin()
+    try:
+        if not kind:
+            payload = vulnerabilities.overview()
+        else:
+            payload = vulnerabilities.detail(kind, identifier)
+    except ValueError:
+        abort(404)
+    except vulnerabilities.NotFound:
+        abort(404, "Not in the latest vulnerability report")
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        app.logger.warning("vulnerability report unavailable", exc_info=True)
+        abort(503, "The vulnerability report is temporarily unavailable")
     return Response(json.dumps(payload), mimetype="application/json")
 
 

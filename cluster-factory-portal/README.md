@@ -24,6 +24,12 @@ credential; `factory-admins` remains a direct Keycloak operation. Cluster
 records, jobs, logs and deletion actions remain restricted to their original
 Keycloak subject unless the viewer is an administrator.
 
+Security > Vulnerabilities (administrators only) shows the report from the
+twice-daily scan in `ansible/vulnscan/` of the k8s repository: systems, their
+software, and the vulnerabilities that affect them. The portal reads the
+report through the restricted dispatcher's read-only `vulns` commands, and
+`static/vulns.js` renders it and checks for a newer report every minute.
+
 The Kubernetes API integration uses the standard library with the mounted
 service-account CA and token. Keeping the runtime dependency set small makes
 the recurring image audit easier to review.
