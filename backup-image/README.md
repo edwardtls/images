@@ -1,9 +1,13 @@
 # PostgreSQL backup image
 
-This image contains PostgreSQL 18.6 client tools, the AWS CLI, Python, and
-boto3. It can dump PostgreSQL 15 through 18 databases, upload the resulting
-archive to an S3-compatible service such as MinIO, and execute the retention
-script used by the d00s backup CronJobs.
+This image contains PostgreSQL 18.6 client tools, Python, and boto3. It can
+dump PostgreSQL 15 through 18 databases, upload the resulting archive to an
+S3-compatible service such as MinIO, and execute the upload and retention
+scripts used by the d00s backup CronJobs.
+
+boto3 and its dependencies are pinned in `requirements.txt` and installed from
+PyPI into `/opt/backup`, which is first on `PATH`. Alpine's packaged AWS CLI and
+Python libraries trailed upstream security fixes, and the jobs only need boto3.
 
 The image upgrades packages inherited from the Alpine base during every
 no-cache build. It removes the upstream PostgreSQL `gosu` helper and clears the
