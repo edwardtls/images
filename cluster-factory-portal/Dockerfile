@@ -1,4 +1,4 @@
-FROM python:3.13.9-alpine3.22@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413f31026c3856e5911618b1 AS audit
+FROM python:3.13.18-alpine3.24@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca AS audit
 
 WORKDIR /audit
 COPY requirements.txt /audit/requirements.txt
@@ -7,12 +7,17 @@ RUN apk upgrade --no-cache \
     && pip-audit --requirement /audit/requirements.txt \
     && touch /audit/passed
 
-FROM python:3.13.9-alpine3.22@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413f31026c3856e5911618b1 AS runtime
+FROM python:3.13.18-alpine3.24@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca AS runtime
 
 COPY --from=audit /audit/passed /audit-passed
 
+# The portal does not use SQLite, so its library and Python module are removed
+# with the rest of Python's runtime dependencies kept.
 RUN apk upgrade --no-cache \
     && apk add --no-cache openssh-client ca-certificates tini \
+    && apk add --no-cache libbz2 libffi gdbm xz-libs ncurses-libs readline libssl3 libcrypto3 libuuid zlib \
+    && apk del --no-cache .python-rundeps sqlite-libs \
+    && rm -rf /usr/local/lib/python3.13/sqlite3 /usr/local/lib/python3.13/lib-dynload/_sqlite3.*.so \
     && test -f /audit-passed \
     && rm /audit-passed \
     && addgroup -g 65532 portal \
