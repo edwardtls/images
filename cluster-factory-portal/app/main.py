@@ -608,11 +608,14 @@ def documentation_detail(document_id: str):
     return page("doc.html", document=document)
 
 
+SECURITY_WINDOWS = (("3h", "Last 3 hours"), ("today", "Today"), ("24h", "Last 24 hours"),
+                    ("3d", "Last 3 days"), ("7d", "Last week"), ("all", "All"))
+
+
 @app.get("/security")
 def security_dashboard():
     require_security()
-    windows = (("3h", "Last 3 hours"), ("today", "Today"), ("24h", "Last 24 hours"),
-               ("3d", "Last 3 days"), ("7d", "Last week"), ("all", "All"))
+    windows = SECURITY_WINDOWS
     window = request.args.get("window", "today")
     view = request.args.get("view", "edge")
     if window not in dict(windows):
@@ -678,8 +681,10 @@ def vulnerabilities_dashboard(view: str = "", identifier: str = ""):
     require_admin()
     if view and (view not in VULNERABILITY_VIEWS or not vulnerabilities.IDENTIFIER.fullmatch(identifier)):
         abort(404)
-    return page("security_vulns.html", view=VULNERABILITY_VIEWS.get(view, "overview"),
-                identifier=identifier)
+    # One page with the edge and MCP views, so switching tabs needs no reload;
+    # the edge view is fetched when its tab is opened.
+    return page("security.html", partial="", view="vulns", window="today", windows=SECURITY_WINDOWS,
+                vuln_view=VULNERABILITY_VIEWS.get(view, "overview"), identifier=identifier)
 
 
 @app.get("/api/security/vulnerabilities/status")

@@ -93,6 +93,17 @@ class VulnerabilityPageTests(unittest.TestCase):
         self.assertIn(b'/static/vulns.js', response.data)
         self.assertEqual(self.client.get("/security/vulnerabilities/other/x", base_url=BASE).status_code, 404)
 
+    def test_vulnerabilities_are_a_view_of_the_security_page(self):
+        self._login([ADMIN_GROUP])
+        page = self.client.get("/security/vulnerabilities", base_url=BASE).get_data(as_text=True)
+        self.assertIn('data-view="vulns" class="active"', page)
+        self.assertIn('<div id="vulns-pane">', page)
+        self.assertIn('data-window="today" aria-live="polite" hidden data-empty', page)
+        with patch("app.main.security_store.edge_status", side_effect=RuntimeError("down")):
+            edge = self.client.get("/security?view=edge", base_url=BASE).get_data(as_text=True)
+        self.assertIn('<div id="vulns-pane" hidden>', edge)
+        self.assertIn('/static/vulns.js', edge)
+
 
 class VulnerabilityImportTests(unittest.TestCase):
     def _export(self, lines):

@@ -2,10 +2,14 @@
 // for a newer report every minute, so the page never needs a reload.
 // Pods and Docker containers are their own entries: a pod can run on any node
 // of its cluster, so it is identified by cluster and namespace, not by node.
+// It is one view of the Security page: links within it are opened in place
+// (window.factoryVulns.open), and static/app.js switches the tabs.
 (()=>{
 const root=document.getElementById('vulns');
 if(!root)return;
-const view=root.dataset.view,id=root.dataset.id;
+let view=root.dataset.view,id=root.dataset.id;
+let seq=0,restoreScroll=null;
+const cache=new Map();
 const SEVERITIES=['Critical','High','Medium','Low','Negligible','Unknown'];
 const PAGE=100;
 const state={severities:new Set(['Critical','High','Medium','Low']),kev:false,fixable:false,query:'',limit:PAGE,softwareQuery:'',softwareLimit:PAGE,podQuery:'',podFindings:false,podLimit:PAGE};
@@ -73,6 +77,12 @@ const filters=(onChange)=>{
 const matches=item=>state.severities.has(item.severity)&&(!state.kev||item.kev)&&(!state.fixable||item.fixable)
   &&(!state.query||item.id.toLowerCase().includes(state.query)||(item.aliases||[]).some(a=>a.toLowerCase().includes(state.query))
      ||(item.packages||[]).some(p=>p.toLowerCase().includes(state.query))||(item.package||'').toLowerCase().includes(state.query));
+// A sticky bar of links to the sections of a long page.
+const jump=items=>el('nav',{class:'vuln-jump','aria-label':'Jump to section'},el('span',{},'Jump to'),
+  ...items.filter(Boolean).map(([target,label,count])=>el('a',{href:`#${target}`,onclick:event=>{event.preventDefault();
+    const node=document.getElementById(target);if(node)node.scrollIntoView({behavior:'smooth',block:'start'})}},label,count===undefined?null:el('b',{},count))),
+  el('a',{href:'#',onclick:event=>{event.preventDefault();window.scrollTo({top:0,behavior:'smooth'})}},'↑ Top'));
+const anchor=(target,...children)=>el('section',{id:target,class:'vuln-anchor'},...children);
 const more=(shown,total,onMore)=>shown<total?el('button',{class:'secondary vuln-more',type:'button',onclick:onMore},`Show more (${total-shown} hidden)`):null;
 
 function overview(report){
@@ -87,7 +97,7 @@ function overview(report){
     el('article',{},el('span',{},'Critical / High'),el('strong',{},`${total('Critical')} / ${total('High')}`),el('small',{},`${vulns.length} vulnerabilities in total`)),
     el('article',{class:vulns.some(v=>v.kev)?'vuln-alert':''},el('span',{},'Known exploited'),el('strong',{},vulns.filter(v=>v.kev).length),el('small',{},'on the CISA KEV list')));
 
-  const list=el('div');
+  const list=el('div',{id:'vuln-list',class:'vuln-anchor'});
   const renderList=(keepFocus)=>{
     const shown=vulns.filter(matches);
     const rows=shown.slice(0,state.limit).map(v=>el('div',{class:'tr'},
@@ -114,7 +124,7 @@ function overview(report){
     cell('Last scan',when(s.scanned_at),s.status==='ok'?null:el('small',{class:'vuln-error'},s.error||s.status)),
     cell('Software',`${s.packages} packages`,s.workloads?el('small',{},`${s.workloads} pods running here now`):null),
     cell('Findings',counts(s.counts))));
-  const podList=el('section');
+  const podList=anchor('vuln-pods');
   const renderPods=(keepFocus)=>{
     const query=state.podQuery;
     const shown=pods.filter(s=>(!state.podFindings||(s.counts&&s.counts.total))
@@ -138,12 +148,14 @@ function overview(report){
     if(keepFocus){const input=podList.querySelector('input');input.focus()}
   };
   renderPods();
-  const skipped=(report.skipped||[]).length?el('section',{class:'panel vuln-skipped'},el('h2',{},'Not scanned'),
+  const skipped=(report.skipped||[]).length?el('section',{id:'vuln-skipped',class:'panel vuln-skipped vuln-anchor'},el('h2',{},'Not scanned'),
     el('div',{class:'mini-list'},...report.skipped.map(s=>el('div',{},el('span',{},`${s.name} `,el('small',{class:'mono'},`${s.node}/${s.vmid}`)),el('span',{class:'muted'},s.reason))))):null;
 
   root.replaceChildren(stamp(report),metrics,
-    vulns.length?list:el('section',{class:'empty'},'No known vulnerabilities in any scanned system. The systems and their software are listed below.'),
-    el('section',{},el('div',{class:'section-head'},el('div',{},el('h2',{},'Hosts and VMs'),el('p',{},'Systems scanned in the last 7 days. Open one to see its software and findings.'))),
+    jump([['vuln-list','Vulnerabilities',vulns.length],['vuln-hosts','Hosts and VMs',hosts.length],['vuln-pods','Pods and containers',pods.length],
+      skipped?['vuln-skipped','Not scanned',report.skipped.length]:null]),
+    vulns.length?list:el('section',{id:'vuln-list',class:'empty vuln-anchor'},'No known vulnerabilities in any scanned system. The systems and their software are listed below.'),
+    anchor('vuln-hosts',el('div',{class:'section-head'},el('div',{},el('h2',{},'Hosts and VMs'),el('p',{},'Systems scanned in the last 7 days. Open one to see its software and findings.'))),
       el('div',{class:'table vuln-systems'},el('div',{class:'tr th'},el('span',{},'System'),el('span',{},'OS / address'),el('span',{},'Last scan'),el('span',{},'Software'),el('span',{},'Critical · High · Medium · Low')),...systemRows)),
     podList,skipped);
 }
@@ -208,7 +220,8 @@ function system(data){
       el('p',{},[data.kind==='pod'?data.workload_kind:null,data.kind==='pod'?`namespace ${data.namespace}`:null,data.kind==='pod'?`cluster ${data.cluster}`:null].filter(Boolean).join(' · ')),
       el('p',{class:'muted'},runsOn(data),nodesNow(data)?` · ${nodesNow(data)}`:'')))
     :el('section',{class:'section-head'},el('div',{},el('h2',{},data.name),el('p',{},[data.kind,data.os,data.address,data.source&&data.source!=='inventory'?`Proxmox ${data.source}`:null,data.cluster?`node of cluster ${data.cluster}`:null].filter(Boolean).join(' · '))));
-  const running=(data.workloads||[]).length?el('section',{class:'panel'},el('h2',{},'Pods on this node now'),
+  const images=data.container_images||[],software=data.software||[];
+  const running=(data.workloads||[]).length?el('section',{id:'vuln-running',class:'panel vuln-anchor'},el('h2',{},'Pods on this node now'),
     el('p',{class:'muted'},'Their container images are scanned as separate entries, because they can move to any node of the cluster.'),
     el('div',{class:'mini-list'},...data.workloads.map(w=>el('div',{},el('span',{},kindTag(w.kind),' ',systemLink(w.id,w.name)),el('span',{class:'mono muted'},w.kind==='pod'?`${w.namespace} · ${w.cluster}`:'Docker'))))):null;
   root.replaceChildren(
@@ -220,10 +233,13 @@ function system(data){
       el('article',{},el('span',{},'Critical / High'),el('strong',{},`${data.counts.critical} / ${data.counts.high}`)),
       el('article',{class:data.counts.kev?'vuln-alert':''},el('span',{},'Known exploited'),el('strong',{},data.counts.kev)),
       el('article',{},el('span',{},'Software'),el('strong',{},data.packages),el('small',{},workload?`in ${data.images} container images`:'packages'))),
-    findings.length?el('section',{},el('div',{class:'section-head'},el('div',{},el('h2',{},'Findings'),el('p',{},'Highest risk first.'))),findingsTable(findings)):el('div',{class:'empty'},'No known vulnerabilities on this system.'),
-    (data.container_images||[]).length?el('section',{},el('div',{class:'section-head'},el('div',{},el('h2',{},'Containers'),el('p',{},'The image of each container. Open one for its software.'))),...data.container_images.map(imageRow)):null,
+    jump([['vuln-findings','Findings',findings.length],images.length?['vuln-containers','Containers',images.length]:null,
+      running?['vuln-running','Pods on this node',data.workloads.length]:null,workload?null:['vuln-software','Installed software',software.length]]),
+    findings.length?anchor('vuln-findings',el('div',{class:'section-head'},el('div',{},el('h2',{},'Findings'),el('p',{},'Highest risk first.'))),findingsTable(findings))
+      :el('div',{id:'vuln-findings',class:'empty vuln-anchor'},'No known vulnerabilities on this system.'),
+    images.length?anchor('vuln-containers',el('div',{class:'section-head'},el('div',{},el('h2',{},'Containers'),el('p',{},'The image of each container. Open one for its software.'))),...images.map(imageRow)):null,
     running,
-    workload?null:softwareTable(data.software||[],'Installed software'));
+    workload?null:anchor('vuln-software',softwareTable(software,'Installed software')));
 }
 
 function vulnerability(data){
@@ -241,16 +257,18 @@ function vulnerability(data){
       el('article',{},el('span',{},'Risk / CVSS'),el('strong',{},`${data.risk?data.risk.toFixed(1):'—'} / ${data.cvss??'—'}`)),
       el('article',{},el('span',{},'EPSS'),el('strong',{},percent(data.epss)),el('small',{},data.epss_percentile?`higher than ${Math.round(data.epss_percentile*100)}% of all CVEs`:'')),
       el('article',{class:data.kev?'vuln-alert':''},el('span',{},'Known exploited'),el('strong',{},data.kev?'Yes':'No'))),
-    el('section',{class:'panel'},el('h2',{},'Description'),el('p',{},data.description||'No description was published.'),
+    jump([['vuln-description','Description'],hostRows.length?['vuln-affected-hosts','Affected hosts and VMs',distinct(hostRows)]:null,
+      podRows.length?['vuln-affected-pods','Affected pods and containers',distinct(podRows)]:null]),
+    el('section',{id:'vuln-description',class:'panel vuln-anchor'},el('h2',{},'Description'),el('p',{},data.description||'No description was published.'),
       urls.length?el('ul',{class:'vuln-links'},...urls.map(url=>el('li',{},el('a',{href:url,rel:'noopener noreferrer',target:'_blank'},url)))):null),
-    hostRows.length?el('section',{},el('div',{class:'section-head'},el('div',{},el('h2',{},'Affected hosts and VMs'),el('p',{},`${distinct(hostRows)} systems, in their installed software`))),
+    hostRows.length?anchor('vuln-affected-hosts',el('div',{class:'section-head'},el('div',{},el('h2',{},'Affected hosts and VMs'),el('p',{},`${distinct(hostRows)} systems, in their installed software`))),
       el('div',{class:'table vuln-affected'},el('div',{class:'tr th'},el('span',{},'System'),el('span',{},'Package'),el('span',{},'Fixed in'),el('span',{},'Found in')),
         ...hostRows.map(row=>el('div',{class:'tr'},
           cell('System',systemLink(row.system,row.system_name)),
           cell('Package',el('span',{class:'mono'},row.package),el('small',{class:'mono'},row.version)),
           cell('Fixed in',fixedIn(row)),
           cell('Found in',foundIn(row)))))):null,
-    podRows.length?el('section',{},el('div',{class:'section-head'},el('div',{},el('h2',{},'Affected pods and containers'),
+    podRows.length?anchor('vuln-affected-pods',el('div',{class:'section-head'},el('div',{},el('h2',{},'Affected pods and containers'),
         el('p',{},`${distinct(podRows)} workloads, in their container images. A pod can run on any node of its cluster, so fix it by updating the image, not the node.`))),
       el('div',{class:'table vuln-affected vuln-affected-pods'},el('div',{class:'tr th'},el('span',{},'Workload'),el('span',{},'Namespace · cluster'),el('span',{},'Package'),el('span',{},'Fixed in'),el('span',{},'Container and image')),
         ...podRows.map(row=>el('div',{class:'tr'},
@@ -262,16 +280,48 @@ function vulnerability(data){
     affected.length?null:el('div',{class:'empty'},'No system in the latest report is affected.'));
 }
 
+const apiPath=()=>view==='overview'?'/api/security/vulnerabilities':`/api/security/vulnerabilities/${view}/${encodeURIComponent(id)}`;
 const load=async()=>{
+  const token=seq,path=apiPath();
   try{
     // The status is a few bytes; the report itself is only fetched when it changed.
     const status=await fetchJson('/api/security/vulnerabilities/status');
+    if(token!==seq)return;
     if(status.generated_at===generated){root.querySelectorAll('[data-ago]').forEach(node=>{node.textContent=ago(node.dataset.ago)});return}
-    const data=await fetchJson(view==='overview'?'/api/security/vulnerabilities':`/api/security/vulnerabilities/${view}/${encodeURIComponent(id)}`);
+    const cached=cache.get(path);
+    const data=cached&&cached.generated===status.generated_at?cached.data:await fetchJson(path);
+    if(token!==seq)return;
+    cache.delete(path);cache.set(path,{generated:status.generated_at,data});
+    if(cache.size>20)cache.delete(cache.keys().next().value);
     const first=generated===null;generated=status.generated_at;
     ({overview,system,vulnerability})[view](data);
+    if(first&&restoreScroll!==null){window.scrollTo(0,restoreScroll);restoreScroll=null}
     if(!first)root.prepend(el('p',{class:'vuln-updated'},'A new scan arrived and the page was updated.'));
-  }catch(error){if(generated===null)showError(error.message)}
+  }catch(error){if(token===seq&&generated===null)showError(error.message)}
 };
-load();setInterval(load,60000);
+// Show another page of the report without reloading. Going back restores the
+// scroll position saved when the page was left.
+const open=(path,{history=true}={})=>{
+  const [section,raw]=path.split(/[?#]/)[0].split('/').slice(3);
+  view=({systems:'system',vulnerabilities:'vulnerability'})[section]||'overview';
+  id=view==='overview'?'':decodeURIComponent(raw||'');
+  if(view!=='overview'&&!id)view='overview';
+  if(history){
+    window.history.replaceState({...(window.history.state||{}),scroll:window.scrollY},'');
+    if(location.pathname!==path)window.history.pushState({vulns:true},'',path);
+    restoreScroll=null;
+  }else restoreScroll=(window.history.state||{}).scroll??null;
+  seq++;generated=null;
+  if(!cache.has(apiPath()))root.replaceChildren(el('div',{class:'empty'},'Loading…'));
+  if(history)document.querySelector('.security-tabs')?.scrollIntoView({block:'start'});
+  load();
+};
+root.addEventListener('click',event=>{
+  const link=event.target.closest('a[href^="/security/vulnerabilities"]');
+  if(!link||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+  event.preventDefault();open(link.getAttribute('href'));
+});
+window.factoryVulns={open};
+if(!root.closest('[hidden]'))load();
+setInterval(()=>{if(!root.closest('[hidden]'))load()},60000);
 })();

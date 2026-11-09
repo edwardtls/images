@@ -1,7 +1,0 @@
-{% extends "base.html" %}{% block title %}Vulnerabilities · Factory{% endblock %}{% block content %}
-<section class="page-head"><div><div class="eyebrow">Software inventory</div><h1>Vulnerabilities</h1><p>Installed software on every host, Proxmox guest and running container image, matched against published vulnerabilities. Scanned twice a day from Atlantis.</p></div></section>
-<nav class="security-tabs" aria-label="Security views"><a href="/security?view=edge">Edge defence</a><a href="/security?view=mcp" data-mcp-tab>MCP honeypot<span class="mcp-unseen-dot" aria-hidden="true" hidden></span></a><a href="/security/vulnerabilities" class="active" aria-current="page">Vulnerabilities</a></nav>
-<div id="vulns" data-view="{{ view }}" data-id="{{ identifier }}" aria-live="polite"><div class="empty">Loading the latest report…</div></div>
-<p class="note">Severity comes from the distribution or advisory that published the vulnerability. “Known exploited” means it is on the CISA list of vulnerabilities exploited in the wild; EPSS is the estimated chance of exploitation in the next 30 days. Container image software is read once per image digest.</p>
-{% endblock %}
-{% block scripts %}<script src="/static/vulns.js" defer></script>{% endblock %}
