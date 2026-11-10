@@ -80,5 +80,7 @@ Atlantis through the forced SSH dispatcher. The web container receives neither
 the model API nor a Kubernetes remediation credential. It can select monitoring
 mode, development mode, one immediate analysis, or a complete stop. Atlantis
 validates the action in a root-owned wrapper. Kubernetes observations and the
-last bounded analysis are returned as JSON; mutation remains limited to the
-database-backup Job runbooks enforced outside the model.
+last bounded analysis are returned as JSON; mutation remains limited to two
+CloudNativePG backup runbooks enforced outside the model: start a new base
+backup when a cluster's latest one failed, and delete failed Backups that a
+newer successful one superseded.
