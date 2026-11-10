@@ -1,4 +1,7 @@
-"""Bounded cluster scan with narrowly-scoped deterministic backup remediation."""
+"""Bounded cluster scan with narrowly-scoped deterministic backup remediation.
+
+Backups are the CloudNativePG Barman Cloud backups of every database cluster.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +18,10 @@ import uuid
 
 from . import ai_control, kube
 
-BACKUP_NS = "backup"
+CNPG = "/apis/postgresql.cnpg.io/v1"
+BACKUP_PLUGIN = "barman-cloud.cloudnative-pg.io"
+BACKUP_MAX_AGE = dt.timedelta(hours=30)  # daily base backups, plus slack
+BACKUP_ACTIVE = {"pending", "started", "running", "finalizing"}
 MODEL_URL = os.getenv("AI_MODEL_URL", "http://d00s-ai-model.factory.svc.cluster.local:11434/api/chat")
 MODEL_TAGS_URL = MODEL_URL.rsplit("/", 1)[0] + "/tags"
 ALERTS_PATH = ("/api/v1/namespaces/monitoring/services/"
@@ -32,60 +38,61 @@ def _ts(value: str | None) -> dt.datetime:
     return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _source(job: dict) -> str | None:
-    for owner in job.get("metadata", {}).get("ownerReferences", []):
-        if owner.get("kind") == "CronJob":
-            return owner.get("name")
-    return job.get("metadata", {}).get("labels", {}).get("factory.d00s.org/source-cronjob")
+def _phase(backup: dict) -> str:
+    return backup.get("status", {}).get("phase", "pending")
 
 
-def _retry(cronjob: dict) -> str:
-    source = cronjob["metadata"]["name"]
-    name = f"ai-retry-{source[:35]}-{uuid.uuid4().hex[:8]}"
-    labels = dict(cronjob["spec"]["jobTemplate"].get("metadata", {}).get("labels", {}))
-    labels.update({"app.kubernetes.io/managed-by": "d00s-ai-remediator",
-                   "factory.d00s.org/source-cronjob": source})
-    body = {"apiVersion": "batch/v1", "kind": "Job",
-            "metadata": {"name": name, "namespace": BACKUP_NS, "labels": labels},
-            "spec": cronjob["spec"]["jobTemplate"]["spec"]}
-    kube.api("POST", f"/apis/batch/v1/namespaces/{BACKUP_NS}/jobs", body)
+def _retry(namespace: str, cluster: str) -> str:
+    name = f"ai-retry-{cluster[:35]}-{uuid.uuid4().hex[:8]}"
+    body = {"apiVersion": "postgresql.cnpg.io/v1", "kind": "Backup",
+            "metadata": {"name": name, "namespace": namespace,
+                         "labels": {"app.kubernetes.io/managed-by": "d00s-ai-remediator"}},
+            "spec": {"cluster": {"name": cluster}, "method": "plugin", "target": "prefer-standby",
+                     "pluginConfiguration": {"name": BACKUP_PLUGIN}}}
+    kube.api("POST", f"{CNPG}/namespaces/{namespace}/backups", body)
     return name
 
 
-def _backup_actions() -> tuple[list[str], list[dict]]:
-    jobs = _items(f"/apis/batch/v1/namespaces/{BACKUP_NS}/jobs")
-    cronjobs = {item["metadata"]["name"]: item for item in
-                _items(f"/apis/batch/v1/namespaces/{BACKUP_NS}/cronjobs")}
+def _backup_actions(now: dt.datetime | None = None) -> tuple[list[str], list[dict]]:
+    """Check the Barman Cloud backups of every CNPG cluster.
+
+    The only repairs are starting a new base backup when the latest one failed and none
+    is running, and deleting failed Backups once a newer one has succeeded.
+    """
+    now = now or dt.datetime.now(dt.timezone.utc)
     findings: list[str] = []
     actions: list[dict] = []
-    by_source: dict[str, list[dict]] = {}
-    for job in jobs:
-        source = _source(job)
-        if source:
-            by_source.setdefault(source, []).append(job)
-    for source, source_jobs in sorted(by_source.items()):
-        source_jobs.sort(key=lambda item: _ts(item.get("status", {}).get("completionTime") or
-                                             item.get("metadata", {}).get("creationTimestamp")), reverse=True)
-        latest = source_jobs[0]
-        if latest.get("status", {}).get("failed") and source in cronjobs:
-            findings.append(f"Latest backup job for {source} failed: {latest['metadata']['name']}")
-            # Never launch a duplicate while any run for this CronJob is active.
-            active = [job for job in source_jobs if job.get("status", {}).get("active")]
-            if not active:
-                retry = _retry(cronjobs[source])
-                actions.append({"runbook": "retry-failed-backup", "target": source,
-                                "detail": retry, "status": "started"})
-        successful = [job for job in source_jobs if job.get("status", {}).get("succeeded")]
-        if successful:
-            newest_success = max(_ts(job.get("status", {}).get("completionTime")) for job in successful)
-            for job in source_jobs:
-                if (job.get("status", {}).get("failed") and
-                        _ts(job.get("status", {}).get("completionTime")) < newest_success):
-                    name = job["metadata"]["name"]
-                    kube.api("DELETE", f"/apis/batch/v1/namespaces/{BACKUP_NS}/jobs/{name}",
-                             {"propagationPolicy": "Background"})
-                    actions.append({"runbook": "cleanup-superseded-failure", "target": source,
-                                    "detail": name, "status": "completed"})
+    by_cluster: dict[tuple[str, str], list[dict]] = {}
+    for backup in _items(f"{CNPG}/backups"):
+        key = (backup["metadata"]["namespace"], backup.get("spec", {}).get("cluster", {}).get("name", ""))
+        by_cluster.setdefault(key, []).append(backup)
+    for cluster in _items(f"{CNPG}/clusters"):
+        namespace, name = cluster["metadata"]["namespace"], cluster["metadata"]["name"]
+        status = cluster.get("status", {})
+        archiving = next((c for c in status.get("conditions", []) if c.get("type") == "ContinuousArchiving"), None)
+        if archiving and archiving.get("status") != "True":
+            findings.append(f"WAL archiving failing for {namespace}/{name}: {archiving.get('message', '')[:160]}")
+        backups = sorted(by_cluster.get((namespace, name), []),
+                         key=lambda item: _ts(item["metadata"].get("creationTimestamp")), reverse=True)
+        if not backups:
+            continue
+        done = [b for b in backups if _phase(b) == "completed"]
+        newest_success = max((_ts(b["status"].get("stoppedAt")) for b in done), default=None)
+        if newest_success is None or now - newest_success > BACKUP_MAX_AGE:
+            findings.append(f"No successful base backup for {namespace}/{name} in the last 30 hours")
+        latest = backups[0]
+        if _phase(latest) == "failed":
+            findings.append(f"Latest base backup for {namespace}/{name} failed: {latest['metadata']['name']}")
+            if not any(_phase(b) in BACKUP_ACTIVE for b in backups):
+                actions.append({"runbook": "retry-failed-backup", "target": f"{namespace}/{name}",
+                                "detail": _retry(namespace, name), "status": "started"})
+        if newest_success is not None:
+            for backup in backups:
+                if _phase(backup) == "failed" and _ts(backup["metadata"].get("creationTimestamp")) < newest_success:
+                    backup_name = backup["metadata"]["name"]
+                    kube.api("DELETE", f"{CNPG}/namespaces/{namespace}/backups/{backup_name}")
+                    actions.append({"runbook": "cleanup-superseded-failure", "target": f"{namespace}/{name}",
+                                    "detail": backup_name, "status": "completed"})
     return findings, actions
 
 
