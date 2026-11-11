@@ -288,8 +288,8 @@ if(securityContent){
       {opacity:1,transform:'translateY(0)'}
     ],{duration:420,easing:'cubic-bezier(.22,1,.36,1)'});
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      const comfortableTop=window.innerHeight*.58;
-      const nudge=Math.min(150,Math.max(0,details.getBoundingClientRect().top-comfortableTop));
+      const comfortableTop=window.innerHeight*.48;
+      const nudge=Math.min(280,Math.max(0,details.getBoundingClientRect().top-comfortableTop));
       if(nudge)window.scrollBy({top:nudge,behavior:'smooth'});
     }));
   };
