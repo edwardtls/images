@@ -279,10 +279,25 @@ if(securityContent){
     previousPlatform=platform;
   };
   const selectedPlatform=()=>choices.find(choice=>choice.checked)?.value||'';
+  const revealDetails=()=>{
+    const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    details.hidden=false;
+    if(reducedMotion)return;
+    details.animate([
+      {opacity:0,transform:'translateY(-18px)'},
+      {opacity:1,transform:'translateY(0)'}
+    ],{duration:420,easing:'cubic-bezier(.22,1,.36,1)'});
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const comfortableTop=window.innerHeight*.58;
+      const nudge=Math.min(150,Math.max(0,details.getBoundingClientRect().top-comfortableTop));
+      if(nudge)window.scrollBy({top:nudge,behavior:'smooth'});
+    }));
+  };
   const choose=platform=>{
     if(!platform)return;
-    filterProfiles(platform);details.hidden=false;update(platform);
-    details.scrollIntoView({behavior:'smooth',block:'start'});
+    const firstSelection=details.hidden;
+    filterProfiles(platform);update(platform);
+    if(firstSelection)revealDetails();
   };
   choices.forEach(choice=>choice.addEventListener('change',()=>choose(choice.value)));
   select.addEventListener('change',()=>update(selectedPlatform()||select.selectedOptions[0]?.dataset.platform));

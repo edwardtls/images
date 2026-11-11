@@ -89,6 +89,10 @@ class WorkspaceTests(unittest.TestCase):
         css = (Path(__file__).parents[1] / "app/static/cluster.css").read_text(encoding="utf-8")
         self.assertIn(".build-form [hidden]{display:none!important}", css)
         self.assertIn(".platform-choices{display:grid", css)
+        javascript = (Path(__file__).parents[1] / "app/static/app.js").read_text(encoding="utf-8")
+        self.assertIn("details.animate([", javascript)
+        self.assertIn("Math.min(150", javascript)
+        self.assertNotIn("details.scrollIntoView", javascript)
 
     def test_static_assets_are_revisioned_to_prevent_stale_platform_code(self):
         self.login([ADMIN_GROUP])
