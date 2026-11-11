@@ -132,3 +132,5 @@
 .subpane:focus{outline:none}.pane-head{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:24px}.pane-head h2{font-size:32px;margin:0 0 4px}.pane-head p{margin:0;color:var(--muted)}
 @media(max-width:760px){.pane-head{flex-direction:column;align-items:stretch}.pane-head>.button{width:100%}.subtabs a{flex:1;text-align:center}}
 .platform-select{display:flex;align-items:center;gap:.7rem}.platform-select>img{width:2.2rem;height:2.2rem;object-fit:contain;flex:0 0 auto}.platform-select select{flex:1;min-width:0}.platform-key{display:flex;flex-wrap:wrap;gap:.65rem 1.2rem;margin-top:1rem}.platform-key span{display:inline-flex;align-items:center;gap:.45rem;font-size:.82rem;color:var(--muted)}.platform-key img{width:1.35rem;height:1.35rem}.choice-box.unavailable{opacity:.35;cursor:not-allowed}.choice-box.unavailable span{cursor:not-allowed}
+/* Elements toggled with the hidden attribute must stay hidden even when a component rule sets display. */
+.build-form [hidden]{display:none!important}

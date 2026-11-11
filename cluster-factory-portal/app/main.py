@@ -25,7 +25,7 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import (ai_control, device_egress, device_egress_store, documentation, edge_security, kube, ps5_reports,
+from . import (ai_control, build_options, device_egress, device_egress_store, documentation, edge_security, kube, ps5_reports,
                security_store, vulnerabilities)
 from .lifecycle import lifecycle_history
 from .security import (can_manage_clusters, can_view_security, client_ip,
@@ -335,7 +335,9 @@ def clusters_workspace(active: str):
     return page("clusters.html", tabs=list(CLUSTER_TABS), active=active, nav="clusters",
                 clusters=records, inventory=normalized_inventory(records), jobs=kube.active_jobs(),
                 quota=kube.quota_for(user), profiles=kube.visible_profiles(is_admin(user)),
-                versions=kube.versions())
+                versions=kube.versions(), version_attributes=build_options.form_attributes,
+                version_label=build_options.label, storage_platforms=build_options.storage_platforms,
+                build_initial=build_options.initial_state)
 
 
 @app.get("/clusters")
@@ -367,8 +369,9 @@ def build():
         abort(400, "Unknown profile")
     if profile_config.get("admin_only") and not is_admin(user):
         abort(403, "This profile is limited to administrators")
-    openshift = profile_config.get("platform") == "openshift"
-    rancher = profile_config.get("platform") == "rke2"
+    platform = build_options.platform_of(profile_config)
+    openshift = platform == "openshift"
+    rancher = platform == "rke2"
     owned = [record for record in kube.cluster_records() if record.get("owner_sub") == user["sub"]]
     pending = [job for job in kube.active_jobs()
                if job["metadata"]["labels"].get("factory.d00s.org/owner") == owner_id(user)]
@@ -377,8 +380,18 @@ def build():
     if (any(record["profile"] == profile for record in kube.cluster_records())
             or profile in kube.inventory().get("clusters", {})):
         abort(409, "This profile already has an active cluster")
+    storage = values.get("storage", "nfs")
+    if storage not in build_options.STORAGE[platform]:
+        abort(400, "Invalid storage selection for this platform")
+    offered = build_options.ADDONS[platform]
+    addons = {name: name in offered and values.get(name) == "on" for name in ("monitoring", "metrics_server")}
+    # Only versions that apply to this platform and these choices are read from
+    # the form; everything else is pinned to the catalog's stable value.
     selected_versions = {}
     for component, allowed in kube.versions().items():
+        if not build_options.applies(component, platform, storage, addons):
+            selected_versions[component] = allowed[0]["value"]
+            continue
         value = values.get(f"version_{component}", "")
         if value not in {item["value"] for item in allowed}:
             abort(400, f"Invalid {component} version")
@@ -398,7 +411,7 @@ def build():
     if control_planes not in {1, 3, 5} or workers not in {1, 2, 3, 4, 5, 6}:
         abort(400, "Requested topology is outside the supported range")
     if openshift:
-        error = kube.openshift_request_error(control_planes, workers, values.get("storage", "nfs"), ttl_hours)
+        error = kube.openshift_request_error(control_planes, workers, storage, ttl_hours)
         if error:
             abort(400, error)
         selected_versions.pop("rke2", None)
@@ -421,13 +434,10 @@ def build():
         "containerd_version": selected_versions.pop("containerd"),
         "argo_chart_version": selected_versions.pop("argocd_chart"),
         "topology": {"control_planes": control_planes, "workers": workers},
-        "storage": {"mode": values.get("storage", "nfs")},
-        "addons": {"monitoring": values.get("monitoring") == "on",
-                   "metrics_server": values.get("metrics_server") == "on", "test_nginx": True},
+        "storage": {"mode": storage},
+        "addons": {**addons, "test_nginx": True},
         "lifecycle": {"ttl": ttl, "retain_data_on_expiry": False},
         "versions": selected_versions, "failure_policy": "rollback"}
-    if request_data["storage"]["mode"] not in {"nfs", "ceph", "both"}:
-        abort(400, "Invalid storage selection")
     try:
         job_id = kube.submit("create", request_data, user, client_ip())
     except ValueError as exc:

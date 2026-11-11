@@ -196,18 +196,46 @@ if(securityContent){
   window.addEventListener('popstate',()=>{const tab=byPath.get(location.pathname);if(tab)show(tab)});
 })();
 
-// New build: say which platform the selected profile builds and show only the
-// settings and warnings that apply to it.
+// New build: show only the settings that apply to the selected profile's
+// platform, storage and add-ons, without reloading. Fields that do not apply
+// are hidden and disabled, so the browser does not submit them; the server
+// applies the same rules (app/build_options.py) and pins everything else.
 (()=>{
   const select=document.querySelector('[data-build-profile]');if(!select)return;
   const form=select.closest('form');
+  const storage=form.querySelector('[data-build-storage]');
+  const words=value=>(value||'').split(' ').filter(Boolean);
+  const setShown=(element,shown)=>{
+    element.hidden=!shown;
+    element.querySelectorAll('input,select').forEach(field=>{field.disabled=!shown});
+  };
   const update=()=>{
     const platform=select.selectedOptions[0]?.dataset.platform||'kubernetes';
-    const openshift=platform==='openshift';
     const rancher=platform==='rke2';
-    // Nothing is disabled: the server validates every version field for both platforms.
-    form.querySelectorAll('[data-openshift-only]').forEach(item=>{item.hidden=!openshift});
-    form.querySelectorAll('[data-rancher-only]').forEach(item=>{item.hidden=!rancher});
+    // Storage choices the platform supports.
+    if(storage){
+      [...storage.options].forEach(option=>{
+        const allowed=words(option.dataset.platforms).includes(platform);
+        option.disabled=!allowed;option.hidden=!allowed;
+      });
+      if(storage.selectedOptions[0]?.disabled){
+        const first=[...storage.options].find(option=>!option.disabled);if(first)first.selected=true;
+      }
+    }
+    // Notes, warnings and add-on groups for this platform (version fields below).
+    form.querySelectorAll('[data-platforms]:not(option):not([data-version])').forEach(element=>{
+      setShown(element,words(element.dataset.platforms).includes(platform));
+    });
+    const mode=storage?.value||'nfs';
+    form.querySelectorAll('[data-version]').forEach(element=>{
+      let shown=words(element.dataset.platforms).includes(platform);
+      if(shown&&element.dataset.addon){
+        const addon=form.querySelector(`input[name="${CSS.escape(element.dataset.addon)}"]`);
+        shown=Boolean(addon&&addon.checked&&!addon.disabled);
+      }
+      if(shown&&element.dataset.storage)shown=words(element.dataset.storage).includes(mode);
+      setShown(element,shown);
+    });
     const logo=form.querySelector('[data-platform-logo]');
     if(logo)logo.src=`/static/platform-${rancher?'rancher':platform}.svg`;
     form.querySelectorAll('input[name="workers"]').forEach(input=>{
@@ -220,5 +248,8 @@ if(securityContent){
       if(defaultWorker)defaultWorker.checked=true;
     }
   };
-  select.addEventListener('change',update);update();
+  select.addEventListener('change',update);
+  storage?.addEventListener('change',update);
+  form.querySelectorAll('[data-build-addon]').forEach(input=>input.addEventListener('change',update));
+  update();
 })();
