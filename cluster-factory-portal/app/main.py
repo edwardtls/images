@@ -101,8 +101,20 @@ def security_headers(response):
     return response
 
 
+NAV_SECTIONS = (("/dashboard", "overview"), ("/clusters", "clusters"), ("/build", "clusters"),
+                ("/howto", "clusters"), ("/jobs", "clusters"), ("/security", "security"),
+                ("/routing", "network"), ("/ps5", "network"), ("/ai", "ai"), ("/docs", "docs"),
+                ("/admin", "admin"))
+
+
+def nav_section(path: str) -> str:
+    return next((section for prefix, section in NAV_SECTIONS
+                 if path == prefix or path.startswith(prefix + "/")), "")
+
+
 def page(template: str, **extra):
     user = session.get("user")
+    extra.setdefault("nav", nav_section(request.path))
     return render_template(template, user=user, admin=bool(user and is_admin(user)),
                            can_clusters=bool(user and can_manage_clusters(user)),
                            can_security=bool(user and can_view_security(user)),
@@ -302,18 +314,38 @@ def dashboard():
     return page("dashboard.html")
 
 
+CLUSTER_TABS = ({"id": "list", "label": "My clusters", "href": "/clusters"},
+                {"id": "build", "label": "New build", "href": "/build"},
+                {"id": "howto", "label": "How it works", "href": "/howto"})
+
+
+def clusters_workspace(active: str):
+    """Clusters, New build and How it works as sub-tabs of one page.
+
+    Every approved user may read How it works; cluster data is loaded only for
+    accounts with the cluster capability, exactly as the separate pages did.
+    """
+    user = current_user()
+    if not can_manage_clusters(user):
+        if active != "howto":
+            abort(403, "Cluster access has not been granted")
+        return page("clusters.html", tabs=[CLUSTER_TABS[2]], active="howto", nav="clusters")
+    kube.reconcile()
+    records = visible_records(user)
+    return page("clusters.html", tabs=list(CLUSTER_TABS), active=active, nav="clusters",
+                clusters=records, inventory=normalized_inventory(records), jobs=kube.active_jobs(),
+                quota=kube.quota_for(user), profiles=kube.visible_profiles(is_admin(user)),
+                versions=kube.versions())
+
+
 @app.get("/clusters")
 def clusters():
-    user = require_clusters(); kube.reconcile()
-    records = visible_records(user)
-    return page("clusters.html", clusters=records, inventory=normalized_inventory(records),
-                jobs=kube.active_jobs(), quota=kube.quota_for(user))
+    return clusters_workspace("list")
 
 
 @app.get("/build")
 def build_form():
-    user = require_clusters()
-    return page("build.html", profiles=kube.visible_profiles(is_admin(user)), versions=kube.versions(), quota=kube.quota_for(user))
+    return clusters_workspace("build")
 
 
 @app.get("/clusters/<profile>")
@@ -543,7 +575,7 @@ def job_stream(job_id: str):
 
 @app.get("/howto")
 def howto():
-    current_user(); return page("howto.html")
+    return clusters_workspace("howto")
 
 
 @app.get("/ai")
@@ -610,15 +642,17 @@ def documentation_detail(document_id: str):
     return page("doc.html", document=document)
 
 
-@app.get("/ps5")
-def ps5_network_report():
-    require_admin()
+NETWORK_TABS = ({"id": "routing", "label": "Device routing", "href": "/routing"},
+                {"id": "ps5", "label": "PS5 network", "href": "/ps5"})
+
+
+def ps5_context(requested: str) -> tuple[dict, int]:
     today_date = dt.datetime.now(dt.timezone.utc).astimezone(ZoneInfo("Europe/Amsterdam")).date()
     window = [today_date - dt.timedelta(days=offset) for offset in range(8)]
     allowed = {day.isoformat() for day in window}
-    requested = request.args.get("date", "latest")
     if requested != "latest" and requested not in allowed:
         abort(400, "Invalid PS5 report date")
+    generated = request.args.get("generated") == "1"
     try:
         available = set(ps5_reports.available()) & allowed
         selected = (next((day.isoformat() for day in window if day.isoformat() in available),
@@ -634,16 +668,47 @@ def ps5_network_report():
     except ValueError:
         abort(400, "Invalid PS5 report date")
     except ps5_reports.NotFound:
-        return page("ps5.html", report=None, selected=selected,
-                    reports=reports, generated=request.args.get("generated") == "1",
-                    error="No report exists for that date. Run it now to create one."), 404
+        return {"report": None, "selected": selected, "reports": reports, "generated": generated,
+                "ps5_error": "No report exists for that date. Run it now to create one."}, 404
     except (OSError, RuntimeError, json.JSONDecodeError, subprocess.SubprocessError):
         app.logger.warning("PS5 network report unavailable", exc_info=True)
-        return page("ps5.html", report=None, selected=requested,
-                    reports=[], generated=False,
-                    error="The PS5 report is temporarily unavailable"), 503
-    return page("ps5.html", report=report, selected=report["date"],
-                reports=reports, generated=request.args.get("generated") == "1", error=None)
+        return {"report": None, "selected": requested, "reports": [], "generated": False,
+                "ps5_error": "The PS5 report is temporarily unavailable"}, 503
+    return {"report": report, "selected": report["date"], "reports": reports,
+            "generated": generated, "ps5_error": None}, 200
+
+
+def routing_context() -> tuple[dict, int]:
+    try:
+        state, error = device_egress.status(), None
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+        app.logger.warning("device routing status unavailable", exc_info=True)
+        state, error = {"devices": [], "path": {}}, "Atlantis did not return the device routing state"
+    try:
+        history = device_egress_store.history()
+    except (RuntimeError, psycopg.Error):
+        app.logger.warning("device routing history unavailable", exc_info=True)
+        history = None
+    changed = request.args.get("changed", "")
+    changed_device = next((item for item in state["devices"] if item.get("id") == changed), None)
+    return {"state": state, "routing_error": error, "changed": changed_device,
+            "history": history}, (503 if error else 200)
+
+
+def network_workspace(active: str):
+    """Device routing and the PS5 report as sub-tabs of one administrator page."""
+    require_admin()
+    routing, routing_status = routing_context()
+    # The date only selects a PS5 report; it is ignored on the routing tab.
+    ps5, ps5_status = ps5_context(request.args.get("date", "latest") if active == "ps5" else "latest")
+    status = routing_status if active == "routing" else ps5_status
+    return page("network.html", tabs=list(NETWORK_TABS), active=active, nav="network",
+                **routing, **ps5), status
+
+
+@app.get("/ps5")
+def ps5_network_report():
+    return network_workspace("ps5")
 
 
 @app.post("/ps5/generate")
@@ -794,21 +859,7 @@ def security_delete(address: str):
 
 @app.get("/routing")
 def device_routing():
-    require_admin()
-    try:
-        state, error = device_egress.status(), None
-    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
-        app.logger.warning("device routing status unavailable", exc_info=True)
-        state, error = {"devices": [], "path": {}}, "Atlantis did not return the device routing state"
-    try:
-        history = device_egress_store.history()
-    except (RuntimeError, psycopg.Error):
-        app.logger.warning("device routing history unavailable", exc_info=True)
-        history = None
-    changed = request.args.get("changed", "")
-    changed_device = next((item for item in state["devices"] if item.get("id") == changed), None)
-    return page("routing.html", state=state, error=error, changed=changed_device,
-                history=history), (503 if error else 200)
+    return network_workspace("routing")
 
 
 @app.post("/routing/<device_id>")

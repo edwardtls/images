@@ -1,0 +1,4 @@
+{# Sub-tabs are real links, so every pane has its own URL and works without
+   JavaScript; app.js switches panes in place and keeps the address bar in sync. #}
+{% macro subtabs(label, tabs, active) %}<nav class="subtabs" aria-label="{{ label }}" role="tablist" data-subtabs>{% for tab in tabs %}<a href="{{ tab.href }}" role="tab" id="tab-{{ tab.id }}" aria-controls="pane-{{ tab.id }}" aria-selected="{{ 'true' if tab.id == active else 'false' }}" tabindex="{{ '0' if tab.id == active else '-1' }}" data-title="{{ tab.label }} · Factory"{% if tab.id == active %} class="active"{% endif %}>{{ tab.label }}</a>{% endfor %}</nav>{% endmacro %}
+{% macro pane(id, active) %}<section class="subpane" role="tabpanel" id="pane-{{ id }}" aria-labelledby="tab-{{ id }}" tabindex="-1"{% if id != active %} hidden{% endif %}>{{ caller() }}</section>{% endmacro %}

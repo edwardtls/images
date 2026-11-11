@@ -153,3 +153,58 @@ if(securityContent){
   });
   initSecurityChart(securityContent);
 }
+
+// Sub-tabs (Clusters, Home network): every tab is a real link to its own URL,
+// so this only switches panes in place and keeps the address bar in sync. It
+// never builds markup; it toggles `hidden` and ARIA state on server-rendered panes.
+(()=>{
+  const nav=document.querySelector('[data-subtabs]');if(!nav)return;
+  const tabs=[...nav.querySelectorAll('[role="tab"]')];
+  const pathOf=link=>new URL(link.getAttribute('href'),location.origin).pathname;
+  const byPath=new Map(tabs.map(tab=>[pathOf(tab),tab]));
+  const show=tab=>{
+    tabs.forEach(item=>{
+      const on=item===tab,pane=document.getElementById(item.getAttribute('aria-controls'));
+      item.classList.toggle('active',on);item.setAttribute('aria-selected',on?'true':'false');item.tabIndex=on?0:-1;
+      if(pane)pane.hidden=!on;
+    });
+    if(tab.dataset.title)document.title=tab.dataset.title;
+  };
+  const open=(tab,push)=>{
+    show(tab);
+    const path=pathOf(tab);
+    if(push&&(location.pathname!==path||location.search))history.pushState({subtab:path},'',path);
+  };
+  document.addEventListener('click',event=>{
+    const link=event.target.closest('a[href]');
+    if(!link||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||link.target)return;
+    const url=new URL(link.href,location.href);
+    // Only plain same-origin links to a tab of this page; anything with a
+    // query (e.g. a PS5 report date) or another path is a normal navigation.
+    if(url.origin!==location.origin||url.search||url.hash)return;
+    const tab=byPath.get(url.pathname);if(!tab)return;
+    event.preventDefault();open(tab,true);
+    if(link!==tab)nav.scrollIntoView({block:'start'});
+  });
+  nav.addEventListener('keydown',event=>{
+    const index=tabs.indexOf(document.activeElement);if(index<0)return;
+    const next={ArrowRight:tabs[(index+1)%tabs.length],ArrowLeft:tabs[(index-1+tabs.length)%tabs.length],
+                Home:tabs[0],End:tabs[tabs.length-1]}[event.key];
+    if(!next)return;
+    event.preventDefault();open(next,true);next.focus();
+  });
+  window.addEventListener('popstate',()=>{const tab=byPath.get(location.pathname);if(tab)show(tab)});
+})();
+
+// New build: say which platform the selected profile builds and show only the
+// settings and warnings that apply to it.
+(()=>{
+  const select=document.querySelector('[data-build-profile]');if(!select)return;
+  const form=select.closest('form');
+  const update=()=>{
+    const openshift=select.selectedOptions[0]?.dataset.platform==='openshift';
+    // Nothing is disabled: the server validates every version field for both platforms.
+    form.querySelectorAll('[data-openshift-only]').forEach(item=>{item.hidden=!openshift});
+  };
+  select.addEventListener('change',update);update();
+})();

@@ -1,10 +1,9 @@
-{% extends "base.html" %}{% block title %}Routing · Factory{% endblock %}{% block content %}
 {% macro traffic(item) %}<span class="routing-bytes"><b>{{ (item.up + item.down)|filesizeformat }}</b><small>↑ {{ item.up|filesizeformat }}</small><small>↓ {{ item.down|filesizeformat }}</small></span>{% endmacro %}
 {% macro usage_row(label, item, when='') %}<div class="routing-usage-row"><span class="routing-usage-label">{{ label }}{% if when %}<small>{{ when }}</small>{% endif %}</span>{% if item %}<b>{{ (item.up + item.down)|filesizeformat }}</b><span>↑ {{ item.up|filesizeformat }}</span><span>↓ {{ item.down|filesizeformat }}</span>{% else %}<b>—</b><span></span><span></span>{% endif %}</div>{% endmacro %}
 {% macro span(item) %}{% set start = item.started_at or '' %}{% set end = item.ended_at or '' %}{{ start[11:] }}–{{ end[11:] if end else 'now' }}{% if end and end[:10] != start[:10] %} ({{ start[5:10] }} → {{ end[5:10] }}){% endif %}{% endmacro %}
-<section class="page-head"><div><div class="eyebrow">Home network egress</div><h1>Device routing</h1><p>Choose which devices reach the internet through Atlantis (KPN, Netherlands) or through vpnwifi-gw and Asguard (United States). DNS follows the same path.</p></div></section>
+<div class="pane-head"><div><h2>Device routing</h2><p>Choose which devices reach the internet through Atlantis (KPN, Netherlands) or through vpnwifi-gw and Asguard (United States). DNS follows the same path.</p></div></div>
 {% set path = state.path %}
-{% if error %}<section class="warning"><strong>Routing state unavailable.</strong><span>{{ error }}</span></section>
+{% if routing_error %}<section class="warning"><strong>Routing state unavailable.</strong><span>{{ routing_error }}</span></section>
 {% else %}
 <section class="routing-path {{ 'ready' if path.ready else 'down' }}"><span class="status {{ 'ready' if path.ready else '' }}">{{ 'US path ready' if path.ready else 'US path down' }}</span><span>{% if path.ready %}vpnwifi-gw ({{ path.gateway }}) is reachable; switched devices exit through Asguard in the US.{% else %}Switched devices are cut off, not sent over KPN, until vpnwifi-gw is reachable again.{% endif %}</span></section>
 {% if state.month_usage %}<section class="routing-month"><span>US path this month ({{ state.month }})</span>{{ traffic(state.month_usage) }}</section>{% endif %}
@@ -35,4 +34,3 @@
 </section>{% endif %}
 <p class="note">A device on the US path can only reach the internet through vpnwifi-gw: if that path fails it loses internet access rather than falling back to KPN. It keeps local network access (AirPlay, HomeKit, casting) but cannot use services on Atlantis itself. IPv6 is blocked for it. Data counts IP traffic through the US path only (WireGuard overhead excluded), refreshed whenever this page loads and every 30 seconds on Atlantis; months follow Amsterdam time. The device list is maintained in <span class="mono">ansible/00-atlantis/device-egress.yml</span>.</p>
 {% endif %}
-{% endblock %}

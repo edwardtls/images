@@ -1,5 +1,4 @@
-{% extends "base.html" %}{% block title %}PS5 Network · Factory{% endblock %}{% block content %}
-<section class="page-head"><div><div class="eyebrow">Home network observability</div><h1>PS5 network report</h1><p>Daily classic DNS activity and NTP routing for the monitored console.</p></div></section>
+<div class="pane-head"><div><h2>PS5 network report</h2><p>Daily classic DNS activity and NTP routing for the monitored console.</p></div></div>
 <section class="report-index" aria-labelledby="report-index-title">
   <div class="section-head"><div><h2 id="report-index-title">Today and the last 7 days</h2><p>The 04:00 Amsterdam run creates the previous day's final report. Run any day again on demand.</p></div></div>
   <div class="report-days">
@@ -10,8 +9,7 @@
   </div>
 </section>
 {% if generated %}<div class="success"><strong>Report generated</strong><span>The report below now includes the latest gateway logs.</span></div>{% endif %}
-{% if error %}<div class="warning"><strong>Report unavailable</strong><span>{{ error }}</span></div>{% elif report %}
+{% if ps5_error %}<div class="warning"><strong>Report unavailable</strong><span>{{ ps5_error }}</span></div>{% elif report %}
 <div class="report-meta"><span class="status active">Daily report</span><span class="mono">{{ report.date }}</span><span>Source: Atlantis DNS and NTP telemetry</span></div>
 <article class="doc-content ps5-report">{{ report.html }}</article>
 {% endif %}
-{% endblock %}

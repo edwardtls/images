@@ -84,6 +84,11 @@ class StoreTests(unittest.TestCase):
 class SwitchAuditTests(unittest.TestCase):
     def setUp(self):
         self.client = app.test_client()
+        for target, value in (("app.main.ps5_reports.available", []),
+                              ("app.main.ps5_reports.report", {"date": "2026-11-11", "html": ""})):
+            patcher = patch(target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         with self.client.session_transaction(base_url=BASE) as session:
             session["user"] = {"sub": "admin-subject", "preferred_username": "edward", "groups": [ADMIN_GROUP]}
             session["csrf"] = "token"
