@@ -35,6 +35,7 @@ from .security import (can_manage_clusters, can_view_security, client_ip,
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ["SESSION_SECRET"]
+app.jinja_env.globals["asset_version"] = os.getenv("PORTAL_ASSET_VERSION", "dev")
 app.config.update(MAX_CONTENT_LENGTH=65536, SESSION_COOKIE_HTTPONLY=True,
                   SESSION_COOKIE_SECURE=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_NAME="__Host-factory_session",

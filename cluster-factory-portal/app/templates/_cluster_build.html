@@ -1,8 +1,27 @@
 <div class="pane-head"><div><h2>New build</h2><p>Your account may have {{ quota }} active cluster(s). Tested versions are shown normally; untested candidates carry *.</p></div></div>
-<form class="build-form" method="post" action="/build" data-platform-theme="kubernetes"><input type="hidden" name="csrf" value="{{ csrf }}">
-<fieldset class="platform-stage"><legend>01 · Platform and location</legend>
+<form class="build-form" method="post" action="/build" data-platform-theme="" data-asset-version="{{ asset_version }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+<fieldset class="platform-stage"><legend>01 · Choose a platform</legend>
+  <p class="platform-guidance">Start with the platform. The Factory will then show only the topology, versions and services that apply to it.</p>
+  <div class="platform-choices" role="radiogroup" aria-label="Cluster platform">
+    <label class="platform-choice kubernetes">
+      <input type="radio" name="platform_ui" value="kubernetes" required data-platform-choice>
+      <span class="platform-choice-body"><img src="/static/platform-kubernetes.svg?v={{ asset_version }}" alt=""><span><strong>Vanilla Kubernetes</strong><small>kubeadm with Factory-managed GitOps and optional observability.</small></span><b>Choose</b></span>
+    </label>
+    {% if profiles.ocp %}<label class="platform-choice openshift">
+      <input type="radio" name="platform_ui" value="openshift" required data-platform-choice>
+      <span class="platform-choice-body"><img src="/static/platform-openshift.svg?v={{ asset_version }}" alt=""><span><strong>Red Hat OpenShift</strong><small>Native OpenShift GitOps, monitoring, ingress and platform services.</small></span><b>Choose</b></span>
+    </label>{% endif %}
+    {% if profiles.rke2 %}<label class="platform-choice rke2">
+      <input type="radio" name="platform_ui" value="rke2" required data-platform-choice>
+      <span class="platform-choice-body"><img src="/static/platform-rancher.svg?v={{ asset_version }}" alt=""><span><strong>Rancher / RKE2</strong><small>Hardened RKE2 with Rancher Manager, Argo CD and optional monitoring.</small></span><b>Choose</b></span>
+    </label>{% endif %}
+  </div>
+</fieldset>
+
+<div class="build-details" data-build-details hidden>
+<fieldset class="platform-stage"><legend>02 · Location and lifetime</legend>
   <div class="platform-hero" data-platform-banner>
-    <img src="/static/platform-kubernetes.svg" alt="Kubernetes logo" data-platform-logo>
+    <img src="/static/platform-kubernetes.svg?v={{ asset_version }}" alt="Kubernetes logo" data-platform-logo>
     <div><span class="platform-kicker" data-platform-kicker>Vanilla Kubernetes</span><strong data-platform-title>Build a Kubernetes cluster</strong><small data-platform-summary>Flexible kubeadm foundation with Factory-managed GitOps and optional observability.</small></div>
     <span class="platform-badge" data-platform-badge>kubeadm</span>
   </div>
@@ -12,21 +31,20 @@
     <div class="platform-fixed" data-openshift-only hidden><span>Storage</span><strong>Ceph RBD</strong><small>Required by the OpenShift build profile.</small></div>
     <label>TTL<input name="ttl" value="24h" pattern="[1-9][0-9]*[hdw]" required><small>Examples: 8h, 3d, 2w</small></label>
   </div>
-  <div class="platform-key" aria-label="Available cluster platforms"><span data-platform-key="kubernetes"><img src="/static/platform-kubernetes.svg" alt="">Vanilla Kubernetes</span><span data-platform-key="rke2"><img src="/static/platform-rancher.svg" alt="">RKE2 / Rancher</span><span data-platform-key="openshift"><img src="/static/platform-openshift.svg" alt="">OpenShift</span></div>
 </fieldset>
 
-<fieldset><legend>02 · Topology</legend>
+<fieldset><legend>03 · Topology</legend>
   <p class="platform-guidance" data-topology-guidance>Choose 1, 3 or 5 control planes and 1–6 workers.</p>
   <div class="topology-grid"><div><span class="choice-title" id="control-plane-label">Control planes</span><div class="choice-boxes three" role="radiogroup" aria-labelledby="control-plane-label"><label class="choice-box"><input type="radio" name="control_planes" value="1" checked><span>1</span></label><label class="choice-box"><input type="radio" name="control_planes" value="3"><span>3</span></label><label class="choice-box"><input type="radio" name="control_planes" value="5"><span>5</span></label></div></div><div><span class="choice-title" id="worker-label">Workers</span><div class="choice-boxes six" role="radiogroup" aria-labelledby="worker-label"><label class="choice-box"><input type="radio" name="workers" value="1"><span>1</span></label><label class="choice-box"><input type="radio" name="workers" value="2"><span>2</span></label><label class="choice-box"><input type="radio" name="workers" value="3" checked><span>3</span></label><label class="choice-box"><input type="radio" name="workers" value="4"><span>4</span></label><label class="choice-box"><input type="radio" name="workers" value="5"><span>5</span></label><label class="choice-box"><input type="radio" name="workers" value="6"><span>6</span></label></div></div></div>
 </fieldset>
 
-<fieldset><legend>03 · Platform versions</legend>
+<fieldset><legend>04 · Platform versions</legend>
   <p class="note" data-version-guidance>Only versions used by the selected platform are shown. Hidden dependencies remain pinned to their tested Factory versions.</p>
   <div class="form-grid versions">{% for component, options in versions.items() %}<label data-version-component="{{ component }}">{{ component|replace('_',' ')|title }}<select name="version_{{ component }}">{% for option in options %}<option value="{{ option.value }}">{{ option.value }}{% if not option.tested %} *{% endif %}</option>{% endfor %}</select></label>{% endfor %}</div>
   <p class="note">* discovered but not yet promoted by a successful Factory smoke build.</p>
 </fieldset>
 
-<fieldset><legend>04 · Platform services</legend>
+<fieldset><legend>05 · Platform services</legend>
   <div class="included-services" data-included-services><strong data-included-title>Included with Vanilla Kubernetes</strong><span data-included-copy>Argo CD, Traefik, cert-manager and storage are installed by the Factory.</span></div>
   <div data-configurable-addons>
     <label class="check" data-addon="metrics-server"><input type="checkbox" name="metrics_server" checked><span>Metrics Server</span></label>
@@ -39,4 +57,5 @@
 {% if profiles.rke2 %}<aside class="warning" data-rancher-only hidden><strong>Rancher runs on RKE2.</strong><span>RKE2 supplies Kubernetes and Metrics Server. The Factory adds Argo CD, Rancher Manager, ingress, certificates and storage; full Prometheus monitoring remains optional.</span></aside>{% endif %}
 <aside class="warning"><strong>Expiry deletes data by default.</strong><span>At TTL expiry the Factory runs guarded deletion, validates cleanup, and reports residual resources. Only an administrator can deliberately retain storage.</span></aside>
 <button class="button large">Submit asynchronous build</button>
+</div>
 </form>

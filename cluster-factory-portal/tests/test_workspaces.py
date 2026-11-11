@@ -7,6 +7,7 @@ from unittest.mock import patch
 os.environ.setdefault("OIDC_ISSUER", "https://kc.example.test/realms/d00s")
 os.environ.setdefault("WORKER_IMAGE", "example.test/factory:test")
 os.environ.setdefault("SESSION_SECRET", "test-only")
+os.environ.setdefault("PORTAL_ASSET_VERSION", "test-revision")
 
 from app.main import app
 from app.security import ADMIN_GROUP
@@ -70,7 +71,13 @@ class WorkspaceTests(unittest.TestCase):
     def test_build_form_has_platform_scoped_controls_and_branding(self):
         self.login([ADMIN_GROUP])
         page = self.client.get("/build", base_url=BASE).get_data(as_text=True)
-        self.assertIn('data-platform-theme="kubernetes"', page)
+        self.assertIn('data-platform-theme=""', page)
+        self.assertIn('data-build-details hidden', page)
+        self.assertEqual(page.count('data-platform-choice'), 3)
+        self.assertIn('value="kubernetes" required data-platform-choice', page)
+        self.assertIn('value="openshift" required data-platform-choice', page)
+        self.assertIn('value="rke2" required data-platform-choice', page)
+        self.assertIn("Start with the platform", page)
         self.assertIn('data-platform-logo', page)
         self.assertIn('data-version-component="openshift"', page)
         self.assertIn('data-version-component="rke2"', page)
@@ -81,6 +88,13 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn("RKE2 supplies Kubernetes and Metrics Server", page)
         css = (Path(__file__).parents[1] / "app/static/cluster.css").read_text(encoding="utf-8")
         self.assertIn(".build-form [hidden]{display:none!important}", css)
+        self.assertIn(".platform-choices{display:grid", css)
+
+    def test_static_assets_are_revisioned_to_prevent_stale_platform_code(self):
+        self.login([ADMIN_GROUP])
+        page = self.client.get("/build", base_url=BASE).get_data(as_text=True)
+        for asset in ("app.css", "lifecycle.css", "cluster.css", "app.js"):
+            self.assertIn(f"/static/{asset}?v=test-revision", page)
 
     def test_users_without_cluster_access_get_only_how_it_works(self):
         self.login(access={"approved": True, "clusters": False, "security": False})
