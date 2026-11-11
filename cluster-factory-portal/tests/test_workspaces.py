@@ -12,9 +12,12 @@ from app.security import ADMIN_GROUP
 
 BASE = "https://factory.apps.d00s.org"
 PROFILES = {"k8s": {"domain": "k8s.d00s.org"},
-            "ocp": {"domain": "ocp.d00s.org", "platform": "openshift", "admin_only": True}}
+            "ocp": {"domain": "ocp.d00s.org", "platform": "openshift", "admin_only": True},
+            "rke2": {"domain": "rke2.d00s.org", "platform": "rke2"}}
 VERSIONS = {"kubernetes": [{"value": "1.37.0", "tested": True}],
-            "openshift": [{"value": "4.20.1", "tested": True}]}
+            "openshift": [{"value": "4.20.1", "tested": True}],
+            "rke2": [{"value": "v1.36.6+rke2r1", "tested": False}],
+            "rancher_chart": [{"value": "2.15.3", "tested": False}]}
 
 
 def pane(page, name):
@@ -60,7 +63,21 @@ class WorkspaceTests(unittest.TestCase):
         page = self.client.get("/build", base_url=BASE).get_data(as_text=True)
         self.assertIn('data-platform="openshift">OCP · OpenShift · ocp.d00s.org</option>', page)
         self.assertIn('data-platform="kubernetes">K8S · Vanilla Kubernetes · k8s.d00s.org</option>', page)
-        self.assertIn("OCP builds Red Hat OpenShift. All other profiles build vanilla upstream Kubernetes", page)
+        self.assertIn('data-platform="rke2">RKE2 · Rancher / RKE2 · rke2.d00s.org</option>', page)
+        self.assertIn("RKE2 supplies Kubernetes and Metrics Server", page)
+
+    def test_build_form_has_platform_scoped_controls_and_branding(self):
+        self.login([ADMIN_GROUP])
+        page = self.client.get("/build", base_url=BASE).get_data(as_text=True)
+        self.assertIn('data-platform-theme="kubernetes"', page)
+        self.assertIn('data-platform-logo', page)
+        self.assertIn('data-version-component="openshift"', page)
+        self.assertIn('data-version-component="rke2"', page)
+        self.assertIn('data-version-component="kubernetes"', page)
+        self.assertIn('data-addon="metrics-server"', page)
+        self.assertIn('data-addon="monitoring"', page)
+        self.assertIn("OpenShift GitOps and cluster monitoring are built in", page)
+        self.assertIn("RKE2 supplies Kubernetes and Metrics Server", page)
 
     def test_users_without_cluster_access_get_only_how_it_works(self):
         self.login(access={"approved": True, "clusters": False, "security": False})
