@@ -1,4 +1,4 @@
-FROM python:3.14.10-alpine3.23@sha256:a191e12d3545c23fa0d6d646dd5dcec3ff0b2e8bbc8746db2badad2dcaaa5cc7
+FROM python:3.14.10-alpine3.24@sha256:a18b20ad69e74df6cf6d2e1b1a260d7a1ecf5380fd83b310f83ba88c461cf894
 
 ARG BUILD_DATE
 ARG VCS_REF
@@ -7,7 +7,8 @@ LABEL org.opencontainers.image.title="d00s MCP honeypot" \
       org.opencontainers.image.created="$BUILD_DATE" \
       org.opencontainers.image.revision="$VCS_REF"
 
-RUN addgroup -S -g 65532 nonroot \
+RUN apk upgrade --no-cache \
+    && addgroup -S -g 65532 nonroot \
     && adduser -S -D -H -u 65532 -G nonroot nonroot \
     && python -m pip uninstall -y msgpack setuptools urllib3 \
     && rm -rf /root/.cache /usr/local/lib/python*/site-packages/pip

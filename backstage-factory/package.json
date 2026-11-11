@@ -51,7 +51,13 @@
   "resolutions": {
     "@yarnpkg/core": "4.9.1",
     "@types/react": "^18",
-    "@types/react-dom": "^18"
+    "@types/react-dom": "^18",
+    "brace-expansion@npm:5.0.9": "npm:5.0.12",
+    "follow-redirects": "1.16.2",
+    "ip-address": "10.7.4",
+    "node-forge": "1.4.1",
+    "postcss-selector-parser": "7.1.6",
+    "undici": "6.29.1"
   },
   "prettier": "@backstage/cli/config/prettier",
   "lint-staged": {
