@@ -17,6 +17,7 @@
 .danger-solid{background:var(--red)}
 .security-table .tr{grid-template-columns:1.05fr 1.2fr .8fr 1.3fr 1.45fr .8fr .65fr;align-items:center;gap:12px}
 .security-table .tr small{display:block;overflow-wrap:anywhere}
+.security-table .tr>span.mono{min-width:0;overflow-wrap:anywhere}
 .security-table form{margin:0}
 .security-window{display:flex;flex-wrap:wrap;gap:8px;margin:-10px 0 22px}
 .security-tabs{display:flex;gap:8px;margin:-18px 0 28px;border-bottom:1px solid var(--line)}
