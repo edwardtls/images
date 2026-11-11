@@ -9,6 +9,8 @@ RUN apk upgrade --no-cache \
 
 FROM python:3.13.18-alpine3.24@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca AS runtime
 
+ARG VCS_REF=dev
+
 COPY --from=audit /audit/passed /audit-passed
 
 # The portal does not use SQLite, so its library and Python module are removed
@@ -31,7 +33,7 @@ COPY app /app/app
 RUN chown -R 65532:65532 /app
 
 USER 65532:65532
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PORTAL_ASSET_VERSION=${VCS_REF}
 EXPOSE 8080
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "120", "--access-logfile", "-", "--access-logformat", "%(h)s %(l)s %(u)s %(t)s \"%(m)s %(U)s %(H)s\" %(s)s %(b)s \"%(f)s\" \"%(a)s\"", "app.main:app"]

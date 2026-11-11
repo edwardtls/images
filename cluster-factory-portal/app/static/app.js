@@ -202,6 +202,8 @@ if(securityContent){
 (()=>{
   const select=document.querySelector('[data-build-profile]');if(!select)return;
   const form=select.closest('form');
+  const choices=[...form.querySelectorAll('[data-platform-choice]')];
+  const details=form.querySelector('[data-build-details]');
   const storage=form.querySelector('[data-build-storage]');
   const monitoring=form.querySelector('input[name="monitoring"]');
   const metrics=form.querySelector('input[name="metrics_server"]');
@@ -212,8 +214,14 @@ if(securityContent){
     openshift:{logo:'openshift',alt:'Red Hat OpenShift logo',kicker:'Red Hat OpenShift',title:'Build an OpenShift cluster',badge:'OCP',summary:'An opinionated OpenShift platform using its native GitOps and monitoring operators.',topology:'Choose 3 control planes and 2–6 workers, or the compact 1-control-plane/2-worker shape.',services:'OpenShift GitOps, cluster monitoring, ingress and core platform services are supplied by OpenShift.'}
   };
   let previousPlatform='';let storedStorage='nfs';
+  const assetVersion=encodeURIComponent(form.dataset.assetVersion||'dev');
   const check=(name,value)=>{const input=form.querySelector(`input[name="${name}"][value="${value}"]`);if(input)input.checked=true};
   const availability=(input,available)=>{input.disabled=!available;input.closest('.choice-box')?.classList.toggle('unavailable',!available)};
+  const filterProfiles=platform=>{
+    const matching=[...select.options].filter(option=>option.dataset.platform===platform);
+    [...select.options].forEach(option=>{const visible=option.dataset.platform===platform;option.hidden=!visible;option.disabled=!visible});
+    if(!matching.some(option=>option.selected)&&matching[0])select.value=matching[0].value;
+  };
   const updateTopology=(platform,platformChanged=false)=>{
     const cp=[...form.querySelectorAll('input[name="control_planes"]')];
     const workers=[...form.querySelectorAll('input[name="workers"]')];
@@ -241,9 +249,10 @@ if(securityContent){
     }
     versionFields.forEach(field=>{field.hidden=!visible.has(field.dataset.versionComponent)});
   };
-  const update=()=>{
-    const platform=select.selectedOptions[0]?.dataset.platform||'kubernetes';
+  const update=platform=>{
+    if(!platform){details.hidden=true;document.body.removeAttribute('data-build-platform');return}
     const openshift=platform==='openshift';
+    const rancher=platform==='rke2';
     const platformChanged=Boolean(previousPlatform&&previousPlatform!==platform);
     const copy=platformCopy[platform];
     document.body.dataset.buildPlatform=platform;
@@ -251,12 +260,11 @@ if(securityContent){
     form.querySelectorAll('[data-openshift-only]').forEach(item=>{item.hidden=!openshift});
     form.querySelectorAll('[data-rancher-only]').forEach(item=>{item.hidden=!rancher});
     const logo=form.querySelector('[data-platform-logo]');
-    if(logo){logo.src=`/static/platform-${copy.logo}.svg`;logo.alt=copy.alt}
+    if(logo){logo.src=`/static/platform-${copy.logo}.svg?v=${assetVersion}`;logo.alt=copy.alt}
     ['kicker','title','summary','badge'].forEach(key=>{const target=form.querySelector(`[data-platform-${key}]`);if(target)target.textContent=copy[key]});
     const guidance=form.querySelector('[data-topology-guidance]');if(guidance)guidance.textContent=copy.topology;
     const servicesTitle=form.querySelector('[data-included-title]');if(servicesTitle)servicesTitle.textContent=`Included with ${copy.kicker}`;
     const servicesCopy=form.querySelector('[data-included-copy]');if(servicesCopy)servicesCopy.textContent=copy.services;
-    form.querySelectorAll('[data-platform-key]').forEach(key=>key.classList.toggle('active',key.dataset.platformKey===platform));
     const storageControl=form.querySelector('[data-storage-control]');if(storageControl)storageControl.hidden=openshift;
     if(storage){
       if(openshift){if(previousPlatform!=='openshift')storedStorage=storage.value;storage.value='ceph'}
@@ -270,10 +278,17 @@ if(securityContent){
     updateVersions(platform);
     previousPlatform=platform;
   };
-  select.addEventListener('change',update);
-  form.querySelectorAll('input[name="control_planes"]').forEach(input=>input.addEventListener('change',()=>updateTopology(select.selectedOptions[0]?.dataset.platform||'kubernetes')));
-  storage?.addEventListener('change',()=>updateVersions(select.selectedOptions[0]?.dataset.platform||'kubernetes'));
-  monitoring?.addEventListener('change',()=>updateVersions(select.selectedOptions[0]?.dataset.platform||'kubernetes'));
-  metrics?.addEventListener('change',()=>updateVersions(select.selectedOptions[0]?.dataset.platform||'kubernetes'));
-  update();
+  const selectedPlatform=()=>choices.find(choice=>choice.checked)?.value||'';
+  const choose=platform=>{
+    if(!platform)return;
+    filterProfiles(platform);details.hidden=false;update(platform);
+    details.scrollIntoView({behavior:'smooth',block:'start'});
+  };
+  choices.forEach(choice=>choice.addEventListener('change',()=>choose(choice.value)));
+  select.addEventListener('change',()=>update(selectedPlatform()||select.selectedOptions[0]?.dataset.platform));
+  form.querySelectorAll('input[name="control_planes"]').forEach(input=>input.addEventListener('change',()=>updateTopology(selectedPlatform())));
+  storage?.addEventListener('change',()=>updateVersions(selectedPlatform()));
+  monitoring?.addEventListener('change',()=>updateVersions(selectedPlatform()));
+  metrics?.addEventListener('change',()=>updateVersions(selectedPlatform()));
+  const initial=selectedPlatform();if(initial)choose(initial);else update('');
 })();
