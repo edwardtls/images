@@ -720,7 +720,11 @@ def vulnerabilities_api(kind: str = "", identifier: str = ""):
 def security_delete(address: str):
     require_admin(); values = form(); verify_csrf(values.get("csrf", ""))
     try:
-        normalized = str(ipaddress.ip_address(address))
+        parsed = ipaddress.ip_address(address)
+        # Firewall decisions never carry an IPv6 zone ("fe80::1%eth0").
+        if getattr(parsed, "scope_id", None):
+            raise ValueError("scoped address")
+        normalized = str(parsed)
         edge_security.delete(normalized)
     except ValueError:
         abort(400, "Invalid IP address")
