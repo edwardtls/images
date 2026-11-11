@@ -196,29 +196,83 @@ if(securityContent){
   window.addEventListener('popstate',()=>{const tab=byPath.get(location.pathname);if(tab)show(tab)});
 })();
 
-// New build: say which platform the selected profile builds and show only the
-// settings and warnings that apply to it.
+// New build: make the selected distribution the visual and functional context.
+// The server still owns validation; this layer removes irrelevant choices and
+// prevents platform-bundled services from being submitted as optional add-ons.
 (()=>{
   const select=document.querySelector('[data-build-profile]');if(!select)return;
   const form=select.closest('form');
+  const storage=form.querySelector('[data-build-storage]');
+  const monitoring=form.querySelector('input[name="monitoring"]');
+  const metrics=form.querySelector('input[name="metrics_server"]');
+  const versionFields=[...form.querySelectorAll('[data-version-component]')];
+  const platformCopy={
+    kubernetes:{logo:'kubernetes',alt:'Kubernetes logo',kicker:'Vanilla Kubernetes',title:'Build a Kubernetes cluster',badge:'kubeadm',summary:'Flexible kubeadm foundation with Factory-managed GitOps and optional observability.',topology:'Choose 1, 3 or 5 control planes and 1–6 workers.',services:'Argo CD, Traefik, cert-manager and storage are installed by the Factory.'},
+    rke2:{logo:'rancher',alt:'Rancher logo',kicker:'Rancher / RKE2',title:'Build a Rancher cluster',badge:'RKE2',summary:'A hardened RKE2 foundation with Rancher Manager and GitOps.',topology:'Choose 1, 3 or 5 RKE2 server nodes and 3–6 workers.',services:'RKE2 includes Kubernetes and Metrics Server. The Factory adds Rancher Manager, Argo CD, ingress, certificates and storage.'},
+    openshift:{logo:'openshift',alt:'Red Hat OpenShift logo',kicker:'Red Hat OpenShift',title:'Build an OpenShift cluster',badge:'OCP',summary:'An opinionated OpenShift platform using its native GitOps and monitoring operators.',topology:'Choose 3 control planes and 2–6 workers, or the compact 1-control-plane/2-worker shape.',services:'OpenShift GitOps, cluster monitoring, ingress and core platform services are supplied by OpenShift.'}
+  };
+  let previousPlatform='';let storedStorage='nfs';
+  const check=(name,value)=>{const input=form.querySelector(`input[name="${name}"][value="${value}"]`);if(input)input.checked=true};
+  const availability=(input,available)=>{input.disabled=!available;input.closest('.choice-box')?.classList.toggle('unavailable',!available)};
+  const updateTopology=(platform,platformChanged=false)=>{
+    const cp=[...form.querySelectorAll('input[name="control_planes"]')];
+    const workers=[...form.querySelectorAll('input[name="workers"]')];
+    cp.forEach(input=>availability(input,platform!=='openshift'||input.value!=='5'));
+    if(platformChanged){check('control_planes',platform==='openshift'?'3':'1');check('workers','3')}
+    const selectedCp=Number(form.querySelector('input[name="control_planes"]:checked')?.value||1);
+    workers.forEach(input=>{
+      const count=Number(input.value);
+      const available=platform==='rke2'?count>=3:platform==='openshift'?(selectedCp===1?count===2:count>=2):true;
+      availability(input,available);
+    });
+    const current=form.querySelector('input[name="workers"]:checked');
+    if(!current||current.disabled)check('workers',platform==='openshift'&&selectedCp===1?'2':'3');
+  };
+  const updateVersions=(platform)=>{
+    const selectedStorage=storage?.value||'nfs';
+    const visible=new Set(platform==='openshift'?['openshift']:
+      platform==='rke2'?['rke2','rancher_chart','argocd_chart']:
+      ['kubernetes','containerd','calico','argocd_chart','metallb_chart','traefik_chart','cert_manager_chart']);
+    if(platform!=='openshift'){
+      if(selectedStorage==='nfs'||selectedStorage==='both')visible.add('nfs_provisioner_chart');
+      if(selectedStorage==='ceph'||selectedStorage==='both')visible.add('ceph_csi');
+      if(platform==='kubernetes'&&metrics?.checked)visible.add('metrics_server_chart');
+      if(monitoring?.checked)visible.add('kube_prometheus_stack_chart');
+    }
+    versionFields.forEach(field=>{field.hidden=!visible.has(field.dataset.versionComponent)});
+  };
   const update=()=>{
     const platform=select.selectedOptions[0]?.dataset.platform||'kubernetes';
     const openshift=platform==='openshift';
-    const rancher=platform==='rke2';
-    // Nothing is disabled: the server validates every version field for both platforms.
+    const platformChanged=Boolean(previousPlatform&&previousPlatform!==platform);
+    const copy=platformCopy[platform];
+    document.body.dataset.buildPlatform=platform;
+    form.dataset.platformTheme=platform;
     form.querySelectorAll('[data-openshift-only]').forEach(item=>{item.hidden=!openshift});
     form.querySelectorAll('[data-rancher-only]').forEach(item=>{item.hidden=!rancher});
     const logo=form.querySelector('[data-platform-logo]');
-    if(logo)logo.src=`/static/platform-${rancher?'rancher':platform}.svg`;
-    form.querySelectorAll('input[name="workers"]').forEach(input=>{
-      const unavailable=rancher&&Number(input.value)<3;
-      input.disabled=unavailable;
-      input.closest('.choice-box')?.classList.toggle('unavailable',unavailable);
-    });
-    if(rancher&&Number(form.querySelector('input[name="workers"]:checked')?.value)<3){
-      const defaultWorker=form.querySelector('input[name="workers"][value="3"]');
-      if(defaultWorker)defaultWorker.checked=true;
+    if(logo){logo.src=`/static/platform-${copy.logo}.svg`;logo.alt=copy.alt}
+    ['kicker','title','summary','badge'].forEach(key=>{const target=form.querySelector(`[data-platform-${key}]`);if(target)target.textContent=copy[key]});
+    const guidance=form.querySelector('[data-topology-guidance]');if(guidance)guidance.textContent=copy.topology;
+    const services=form.querySelector('[data-included-services]');if(services)services.innerHTML=`<strong>Included with ${copy.kicker}</strong><span>${copy.services}</span>`;
+    form.querySelectorAll('[data-platform-key]').forEach(key=>key.classList.toggle('active',key.dataset.platformKey===platform));
+    const storageControl=form.querySelector('[data-storage-control]');if(storageControl)storageControl.hidden=openshift;
+    if(storage){
+      if(openshift){if(previousPlatform!=='openshift')storedStorage=storage.value;storage.value='ceph'}
+      else if(previousPlatform==='openshift')storage.value=storedStorage;
     }
+    if(metrics){metrics.disabled=platform!=='kubernetes';if(metrics.disabled)metrics.checked=false;else if(platformChanged)metrics.checked=true}
+    if(monitoring){monitoring.disabled=openshift;if(openshift)monitoring.checked=false}
+    form.querySelector('[data-addon="metrics-server"]')?.toggleAttribute('hidden',platform!=='kubernetes');
+    form.querySelector('[data-addon="monitoring"]')?.toggleAttribute('hidden',openshift);
+    updateTopology(platform,platformChanged);
+    updateVersions(platform);
+    previousPlatform=platform;
   };
-  select.addEventListener('change',update);update();
+  select.addEventListener('change',update);
+  form.querySelectorAll('input[name="control_planes"]').forEach(input=>input.addEventListener('change',()=>updateTopology(select.selectedOptions[0]?.dataset.platform||'kubernetes')));
+  storage?.addEventListener('change',()=>updateVersions(select.selectedOptions[0]?.dataset.platform||'kubernetes'));
+  monitoring?.addEventListener('change',()=>updateVersions(select.selectedOptions[0]?.dataset.platform||'kubernetes'));
+  metrics?.addEventListener('change',()=>updateVersions(select.selectedOptions[0]?.dataset.platform||'kubernetes'));
+  update();
 })();

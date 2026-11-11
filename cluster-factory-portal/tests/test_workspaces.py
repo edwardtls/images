@@ -64,7 +64,20 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn('data-platform="openshift">OCP · OpenShift · ocp.d00s.org</option>', page)
         self.assertIn('data-platform="kubernetes">K8S · Vanilla Kubernetes · k8s.d00s.org</option>', page)
         self.assertIn('data-platform="rke2">RKE2 · Rancher / RKE2 · rke2.d00s.org</option>', page)
-        self.assertIn("RKE2 uses Rancher Kubernetes Engine plus Rancher Manager", page)
+        self.assertIn("RKE2 supplies Kubernetes and Metrics Server", page)
+
+    def test_build_form_has_platform_scoped_controls_and_branding(self):
+        self.login([ADMIN_GROUP])
+        page = self.client.get("/build", base_url=BASE).get_data(as_text=True)
+        self.assertIn('data-platform-theme="kubernetes"', page)
+        self.assertIn('data-platform-logo', page)
+        self.assertIn('data-version-component="openshift"', page)
+        self.assertIn('data-version-component="rke2"', page)
+        self.assertIn('data-version-component="kubernetes"', page)
+        self.assertIn('data-addon="metrics-server"', page)
+        self.assertIn('data-addon="monitoring"', page)
+        self.assertIn("OpenShift GitOps and cluster monitoring are built in", page)
+        self.assertIn("RKE2 supplies Kubernetes and Metrics Server", page)
 
     def test_users_without_cluster_access_get_only_how_it_works(self):
         self.login(access={"approved": True, "clusters": False, "security": False})
