@@ -202,9 +202,23 @@ if(securityContent){
   const select=document.querySelector('[data-build-profile]');if(!select)return;
   const form=select.closest('form');
   const update=()=>{
-    const openshift=select.selectedOptions[0]?.dataset.platform==='openshift';
+    const platform=select.selectedOptions[0]?.dataset.platform||'kubernetes';
+    const openshift=platform==='openshift';
+    const rancher=platform==='rancher';
     // Nothing is disabled: the server validates every version field for both platforms.
     form.querySelectorAll('[data-openshift-only]').forEach(item=>{item.hidden=!openshift});
+    form.querySelectorAll('[data-rancher-only]').forEach(item=>{item.hidden=!rancher});
+    const logo=form.querySelector('[data-platform-logo]');
+    if(logo)logo.src=`/static/platform-${platform}.svg`;
+    form.querySelectorAll('input[name="workers"]').forEach(input=>{
+      const unavailable=rancher&&Number(input.value)<3;
+      input.disabled=unavailable;
+      input.closest('.choice-box')?.classList.toggle('unavailable',unavailable);
+    });
+    if(rancher&&Number(form.querySelector('input[name="workers"]:checked')?.value)<3){
+      const defaultWorker=form.querySelector('input[name="workers"][value="3"]');
+      if(defaultWorker)defaultWorker.checked=true;
+    }
   };
   select.addEventListener('change',update);update();
 })();

@@ -368,6 +368,7 @@ def build():
     if profile_config.get("admin_only") and not is_admin(user):
         abort(403, "This profile is limited to administrators")
     openshift = profile_config.get("platform") == "openshift"
+    rancher = profile_config.get("platform") == "rancher"
     owned = [record for record in kube.cluster_records() if record.get("owner_sub") == user["sub"]]
     pending = [job for job in kube.active_jobs()
                if job["metadata"]["labels"].get("factory.d00s.org/owner") == owner_id(user)]
@@ -400,8 +401,18 @@ def build():
         error = kube.openshift_request_error(control_planes, workers, values.get("storage", "nfs"), ttl_hours)
         if error:
             abort(400, error)
+        selected_versions.pop("rke2", None)
+        selected_versions.pop("rancher_chart", None)
+    elif rancher:
+        error = kube.rancher_request_error(control_planes, workers)
+        if error:
+            abort(400, error)
+        selected_versions.pop("openshift", None)
+        selected_versions["kubernetes"] = selected_versions["rke2"].lstrip("v").split("+")[0]
     else:
         selected_versions.pop("openshift", None)
+        selected_versions.pop("rke2", None)
+        selected_versions.pop("rancher_chart", None)
     request_data = {
         "name": profile, "profile": profile,
         "portal_owner": user.get("preferred_username", "factory-user"),
