@@ -1,4 +1,4 @@
-FROM node:24-trixie-slim AS packages
+FROM node:26-trixie-slim AS packages
 WORKDIR /app
 COPY backstage.json package.json yarn.lock ./
 COPY .yarn ./.yarn
@@ -6,7 +6,7 @@ COPY .yarnrc.yml ./
 COPY packages packages
 RUN find packages \! -name package.json -mindepth 2 -maxdepth 2 -exec rm -rf {} \+
 
-FROM node:24-trixie-slim AS build
+FROM node:26-trixie-slim AS build
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get upgrade -y && \
@@ -25,7 +25,7 @@ RUN mkdir packages/backend/dist/skeleton packages/backend/dist/bundle && \
     tar xzf packages/backend/dist/skeleton.tar.gz -C packages/backend/dist/skeleton && \
     tar xzf packages/backend/dist/bundle.tar.gz -C packages/backend/dist/bundle
 
-FROM node:24-trixie-slim AS production-deps
+FROM node:26-trixie-slim AS production-deps
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get upgrade -y && \
@@ -40,7 +40,7 @@ COPY --from=build --chown=node:node /app/yarn.lock /app/package.json /app/packag
 RUN --mount=type=cache,target=/home/node/.cache/yarn,sharing=locked,uid=1000,gid=1000 \
     yarn workspaces focus --all --production && yarn cache clean
 
-FROM node:24-trixie-slim
+FROM node:26-trixie-slim
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get upgrade -y && \
