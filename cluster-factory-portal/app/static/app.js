@@ -254,7 +254,8 @@ if(securityContent){
     if(logo){logo.src=`/static/platform-${copy.logo}.svg`;logo.alt=copy.alt}
     ['kicker','title','summary','badge'].forEach(key=>{const target=form.querySelector(`[data-platform-${key}]`);if(target)target.textContent=copy[key]});
     const guidance=form.querySelector('[data-topology-guidance]');if(guidance)guidance.textContent=copy.topology;
-    const services=form.querySelector('[data-included-services]');if(services)services.innerHTML=`<strong>Included with ${copy.kicker}</strong><span>${copy.services}</span>`;
+    const servicesTitle=form.querySelector('[data-included-title]');if(servicesTitle)servicesTitle.textContent=`Included with ${copy.kicker}`;
+    const servicesCopy=form.querySelector('[data-included-copy]');if(servicesCopy)servicesCopy.textContent=copy.services;
     form.querySelectorAll('[data-platform-key]').forEach(key=>key.classList.toggle('active',key.dataset.platformKey===platform));
     const storageControl=form.querySelector('[data-storage-control]');if(storageControl)storageControl.hidden=openshift;
     if(storage){
