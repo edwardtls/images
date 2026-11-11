@@ -16,6 +16,7 @@ import time
 import urllib.parse
 import urllib.request
 from email.message import EmailMessage
+from zoneinfo import ZoneInfo
 
 import psycopg
 from authlib.jose import jwt
@@ -24,7 +25,8 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import ai_control, documentation, edge_security, kube, security_store, vulnerabilities
+from . import (ai_control, documentation, edge_security, kube, ps5_reports,
+               security_store, vulnerabilities)
 from .lifecycle import lifecycle_history
 from .security import (can_manage_clusters, can_view_security, client_ip,
                        csrf_token, current_user, groups, is_admin, owner_id,
@@ -606,6 +608,29 @@ def documentation_detail(document_id: str):
     if not document:
         abort(404, "Documentation entry not found")
     return page("doc.html", document=document)
+
+
+@app.get("/ps5")
+def ps5_network_report():
+    require_admin()
+    selected = request.args.get("date", "latest")
+    if selected != "latest" and not ps5_reports.REPORT_DATE.fullmatch(selected):
+        abort(400, "Invalid PS5 report date")
+    today = dt.datetime.now(dt.timezone.utc).astimezone(ZoneInfo("Europe/Amsterdam")).date().isoformat()
+    try:
+        report = ps5_reports.report(selected)
+    except ValueError:
+        abort(400, "Invalid PS5 report date")
+    except ps5_reports.NotFound:
+        return page("ps5.html", report=None, selected=selected,
+                    today=today, error="No report exists for that date"), 404
+    except (OSError, RuntimeError, json.JSONDecodeError, subprocess.SubprocessError):
+        app.logger.warning("PS5 network report unavailable", exc_info=True)
+        return page("ps5.html", report=None, selected=selected,
+                    today=today,
+                    error="The PS5 report is temporarily unavailable"), 503
+    return page("ps5.html", report=report, selected=report["date"],
+                today=today, error=None)
 
 
 SECURITY_WINDOWS = (("3h", "Last 3 hours"), ("today", "Today"), ("24h", "Last 24 hours"),

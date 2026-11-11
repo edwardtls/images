@@ -24,6 +24,13 @@ class DocumentationError(RuntimeError):
     pass
 
 
+def render_markdown(markdown: str) -> Markup:
+    """Render trusted-size Markdown with raw HTML and harmful URLs disabled."""
+    if not isinstance(markdown, str) or len(markdown.encode("utf-8")) > MAX_DOCUMENT_BYTES:
+        raise DocumentationError("The Markdown document is invalid or too large")
+    return Markup(_markdown(markdown))
+
+
 def _configmap() -> dict[str, Any]:
     return kube.api("GET", kube.ns_path("configmaps", CONFIGMAP))
 
@@ -85,7 +92,7 @@ def document(document_id: str) -> dict[str, Any] | None:
     children = [item for item in entries if item.get("parent") == entry["id"]]
     return {
         **entry,
-        "html": Markup(_markdown(markdown)),
+        "html": render_markdown(markdown),
         "markdown": markdown,
         "parent_document": parent,
         "children": children,
