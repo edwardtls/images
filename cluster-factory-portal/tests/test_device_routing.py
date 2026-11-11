@@ -15,11 +15,17 @@ BASE = "https://factory.apps.d00s.org"
 STATE = {
     "devices": [
         {"id": "apple-tv", "name": "Apple TV", "network": "Main LAN", "macs": ["c0:95:6d:7b:ff:1f"],
-         "addresses": ["192.168.31.199"], "online": True, "route": "atlantis"},
+         "addresses": ["192.168.31.199"], "online": True, "route": "atlantis",
+         "usage": {"session": None, "month": {"up": 0, "down": 0}, "total": {"up": 0, "down": 0},
+                   "last_session": None}},
         {"id": "ps5", "name": "PlayStation 5", "network": "Main LAN", "macs": ["d4:f7:d5:d3:4e:55"],
-         "addresses": [], "online": False, "route": "us"},
+         "addresses": [], "online": False, "route": "us",
+         "usage": {"session": {"up": 1500000, "down": 250000000, "started_at": "2026-11-11 12:05", "ended_at": None},
+                   "month": {"up": 3000000, "down": 750000000}, "total": {"up": 9000000, "down": 4000000000},
+                   "last_session": None}},
     ],
     "path": {"gateway": "192.168.86.1", "ready": True},
+    "month": "2026-11", "month_usage": {"up": 3000000, "down": 750000000},
 }
 
 
@@ -54,6 +60,13 @@ class DeviceRoutingTests(unittest.TestCase):
         self.assertIn('action="/routing/apple-tv"', page)
         self.assertIn("US path ready", page)
         self.assertIn('class="routing-device is-us"', page)
+        self.assertIn("US path this month (2026-11)", page)
+        self.assertIn("since 2026-11-11 12:05", page)
+        self.assertIn("251.5 MB", page)   # session up + down
+        self.assertIn("753.0 MB", page)   # month
+        self.assertIn("4.0 GB", page)     # total
+        # A device that never used the US path shows no counters.
+        self.assertEqual(page.count('class="routing-usage"'), 1)
 
     def test_unavailable_state_is_reported(self):
         self._login([ADMIN_GROUP])

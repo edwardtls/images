@@ -4,15 +4,15 @@ import json
 import logging
 import sys
 
-from . import security_store, vulnerabilities
+from . import device_egress_store, security_store, vulnerabilities
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     failed = False
-    # The vulnerability import is independent of the edge and MCP telemetry,
-    # so one failing source does not hold back the other.
-    for name, collect in (("security", security_store.collect), ("vulnerability", vulnerabilities.collect)):
+    # The sources are independent, so one failing does not hold back the others.
+    for name, collect in (("security", security_store.collect), ("vulnerability", vulnerabilities.collect),
+                          ("device egress", device_egress_store.collect)):
         try:
             result = collect()
         except Exception:

@@ -1,13 +1,20 @@
 {% extends "base.html" %}{% block title %}Routing · Factory{% endblock %}{% block content %}
+{% macro traffic(item) %}<span class="routing-bytes"><b>{{ (item.up + item.down)|filesizeformat }}</b><small>↑ {{ item.up|filesizeformat }} · ↓ {{ item.down|filesizeformat }}</small></span>{% endmacro %}
 <section class="page-head"><div><div class="eyebrow">Home network egress</div><h1>Device routing</h1><p>Choose which devices reach the internet through Atlantis (KPN, Netherlands) or through vpnwifi-gw and Asguard (United States). DNS follows the same path.</p></div></section>
 {% set path = state.path %}
 {% if error %}<section class="warning"><strong>Routing state unavailable.</strong><span>{{ error }}</span></section>
 {% else %}
 <section class="routing-path {{ 'ready' if path.ready else 'down' }}"><span class="status {{ 'ready' if path.ready else '' }}">{{ 'US path ready' if path.ready else 'US path down' }}</span><span>{% if path.ready %}vpnwifi-gw ({{ path.gateway }}) is reachable; switched devices exit through Asguard in the US.{% else %}Switched devices are cut off, not sent over KPN, until vpnwifi-gw is reachable again.{% endif %}</span></section>
+{% if state.month_usage %}<section class="routing-month"><span>US path this month ({{ state.month }})</span>{{ traffic(state.month_usage) }}</section>{% endif %}
 {% if changed %}<div class="success"><strong>{{ changed.name }} now routes via {{ 'the US' if changed.route == 'us' else 'Atlantis' }}</strong><span>Existing connections were reset. Restart the app (or the device) if it does not reconnect by itself.</span></div>{% endif %}
 <section class="routing-devices">
 {% for device in state.devices %}<article class="routing-device{{ ' is-us' if device.route == 'us' else '' }}">
   <div class="routing-device-head"><div><h2>{{ device.name }}</h2><p>{{ device.network }} · <span class="mono">{{ device.addresses|join(', ') or 'no address seen' }}</span></p></div><span class="status {{ 'ready' if device.online else '' }}">{{ 'online' if device.online else 'not seen' }}</span></div>
+  {% set usage = device.usage %}{% if usage and (device.route == 'us' or usage.total.up + usage.total.down > 0) %}<dl class="routing-usage">
+    <div><dt>{% if usage.session %}This session <small>since {{ usage.session.started_at }}</small>{% else %}Last session{% if usage.last_session %} <small>{{ usage.last_session.started_at }} – {{ usage.last_session.ended_at }}</small>{% endif %}{% endif %}</dt><dd>{% if usage.session %}{{ traffic(usage.session) }}{% elif usage.last_session %}{{ traffic(usage.last_session) }}{% else %}—{% endif %}</dd></div>
+    <div><dt>This month</dt><dd>{{ traffic(usage.month) }}</dd></div>
+    <div><dt>Total</dt><dd>{{ traffic(usage.total) }}</dd></div>
+  </dl>{% endif %}
   <form method="post" action="/routing/{{ device.id }}" class="routing-switch" data-confirm="Route {{ device.name }} via {{ 'Atlantis (KPN)' if device.route == 'us' else 'the US (Asguard)' }}? Its open connections will be reset.">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <fieldset><legend class="visually-hidden">Internet route for {{ device.name }}</legend>
@@ -17,6 +24,13 @@
   </form>
 </article>{% else %}<div class="empty">No switchable devices are configured on Atlantis.</div>{% endfor %}
 </section>
-<p class="note">A device on the US path can only reach the internet through vpnwifi-gw: if that path fails it loses internet access rather than falling back to KPN. It keeps local network access (AirPlay, HomeKit, casting) but cannot use services on Atlantis itself. IPv6 is blocked for it. The device list is maintained in <span class="mono">ansible/00-atlantis/device-egress.yml</span>.</p>
+{% if history %}<section class="routing-history">
+  <div class="section-head"><div><h2>History</h2><p>Stored in the Factory security database every five minutes and kept for five years.</p></div></div>
+  <div class="split">
+    <div class="panel"><h3>US path by month</h3>{% if history.monthly %}<div class="mini-list">{% for row in history.monthly %}<div><span><b class="mono">{{ row.month }}</b> {{ row.device_name }}</span>{{ traffic(row) }}</div>{% endfor %}</div>{% else %}<p class="muted">No US-path data stored yet.</p>{% endif %}</div>
+    <div class="panel"><h3>Switches</h3>{% if history.events %}<div class="mini-list">{% for event in history.events %}<div><span><span class="mono">{{ event.at }}</span> {{ event.device_name or event.device_id }}</span><span><span class="status {{ 'ready' if event.route == 'us' else '' }}">{{ 'US' if event.route == 'us' else 'NL' }}</span> <small>{{ event.actor }}</small></span></div>{% endfor %}</div>{% else %}<p class="muted">No switches recorded yet.</p>{% endif %}</div>
+  </div>
+</section>{% endif %}
+<p class="note">A device on the US path can only reach the internet through vpnwifi-gw: if that path fails it loses internet access rather than falling back to KPN. It keeps local network access (AirPlay, HomeKit, casting) but cannot use services on Atlantis itself. IPv6 is blocked for it. Data counts IP traffic through the US path only (WireGuard overhead excluded), refreshed whenever this page loads and every 30 seconds on Atlantis; months follow Amsterdam time. The device list is maintained in <span class="mono">ansible/00-atlantis/device-egress.yml</span>.</p>
 {% endif %}
 {% endblock %}
