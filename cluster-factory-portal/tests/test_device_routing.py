@@ -67,6 +67,8 @@ class DeviceRoutingTests(unittest.TestCase):
         self.assertIn('action="/routing/apple-tv"', page)
         self.assertIn("US path ready", page)
         self.assertIn('class="routing-device is-us"', page)
+        self.assertIn("At 23:00 Europe/Amsterdam", page)
+        self.assertIn("automatically returned to Atlantis/KPN", page)
         self.assertIn("US path this month (2026-11)", page)
         self.assertIn("This session<small>12:05–now</small>", page)
         self.assertIn("251.5 MB", page)   # session up + down
