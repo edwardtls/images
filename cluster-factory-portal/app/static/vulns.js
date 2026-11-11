@@ -42,11 +42,14 @@ const systemLink=(system,name)=>el('a',{href:`/security/vulnerabilities/systems/
 const vulnLink=vuln=>el('a',{class:'mono',href:`/security/vulnerabilities/vulnerabilities/${encodeURIComponent(vuln)}`},vuln);
 const badge=severity=>el('span',{class:`vuln-severity ${String(severity||'Unknown').toLowerCase()}`},severity||'Unknown');
 const kevBadge=kev=>kev?el('span',{class:'vuln-kev',title:'On the CISA list of known exploited vulnerabilities'},'Known exploited'):null;
+const isNotApplicable=item=>item.disposition&&item.disposition.state==='not_applicable';
+const dispositionBadge=item=>isNotApplicable(item)?el('span',{class:'vuln-disposition',title:item.disposition.reason},'Not applicable'):null;
 const percent=value=>typeof value==='number'?`${(value*100).toFixed(value<0.01?2:1)}%`:'—';
 const safeUrl=value=>{try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)?url.href:null}catch(_e){return null}};
 const counts=c=>el('span',{class:'vuln-counts'},
   ...['critical','high','medium','low'].map(key=>el('b',{class:`${key}${c&&c[key]?'':' zero'}`,title:`${key} vulnerabilities`},c?c[key]||0:0)),
-  c&&c.kev?el('span',{class:'vuln-kev'},`${c.kev} exploited`):null);
+  c&&c.kev?el('span',{class:'vuln-kev'},`${c.kev} exploited`):null,
+  c&&c.not_applicable?el('span',{class:'vuln-disposition'},`${c.not_applicable} not applicable`):null);
 const cell=(label,...children)=>el('span',{'data-label':label},...children);
 const isWorkload=kind=>kind==='pod'||kind==='container';
 const kindTag=kind=>el('span',{class:`vuln-kind ${isWorkload(kind)?kind:'host'}`},kind==='pod'?'Pod':kind==='container'?'Docker container':'Host');
@@ -87,26 +90,27 @@ const more=(shown,total,onMore)=>shown<total?el('button',{class:'secondary vuln-
 
 function overview(report){
   const systems=report.systems||[],vulns=report.vulnerabilities||[];
+  const activeVulns=vulns.filter(v=>!v.not_applicable),notApplicable=vulns.length-activeVulns.length;
   const hosts=systems.filter(s=>!isWorkload(s.kind)),pods=systems.filter(s=>isWorkload(s.kind)).sort(byRank);
   const failed=hosts.filter(s=>s.status!=='ok');
   const withFindings=list=>list.filter(s=>s.counts&&s.counts.total).length;
-  const total=key=>vulns.filter(v=>v.severity===key).length;
+  const total=key=>activeVulns.filter(v=>v.severity===key).length;
   const metrics=el('section',{class:'metrics vuln-metrics'},
     el('article',{},el('span',{},'Hosts and VMs scanned'),el('strong',{},hosts.length-failed.length),el('small',{},failed.length?`${failed.length} failed or unreachable`:`all answered · ${withFindings(hosts)} with findings`)),
     el('article',{},el('span',{},'Pods and containers'),el('strong',{},pods.length),el('small',{},`${withFindings(pods)} with findings`)),
-    el('article',{},el('span',{},'Critical / High'),el('strong',{},`${total('Critical')} / ${total('High')}`),el('small',{},`${vulns.length} vulnerabilities in total`)),
-    el('article',{class:vulns.some(v=>v.kev)?'vuln-alert':''},el('span',{},'Known exploited'),el('strong',{},vulns.filter(v=>v.kev).length),el('small',{},'on the CISA KEV list')));
+    el('article',{},el('span',{},'Critical / High'),el('strong',{},`${total('Critical')} / ${total('High')}`),el('small',{},`${activeVulns.length} active · ${notApplicable} not applicable`)),
+    el('article',{class:activeVulns.some(v=>v.kev)?'vuln-alert':''},el('span',{},'Known exploited'),el('strong',{},activeVulns.filter(v=>v.kev).length),el('small',{},'active findings on the CISA KEV list')));
 
   const list=el('div',{id:'vuln-list',class:'vuln-anchor'});
   const renderList=(keepFocus)=>{
     const shown=vulns.filter(matches);
-    const rows=shown.slice(0,state.limit).map(v=>el('div',{class:'tr'},
+    const rows=shown.slice(0,state.limit).map(v=>el('div',{class:`tr${v.not_applicable?' vuln-disposed':''}`},
       cell('Vulnerability',vulnLink(v.id),v.aliases&&v.aliases.length?el('small',{class:'mono'},v.aliases.join(' · ')):null,el('small',{},v.summary||'')),
-      cell('Severity',badge(v.severity),kevBadge(v.kev)),
+      cell('Severity',badge(v.severity),kevBadge(v.kev),v.not_applicable?el('span',{class:'vuln-disposition'},'Not applicable'):null),
       cell('Risk',el('strong',{},v.risk?v.risk.toFixed(1):'—'),el('small',{},`CVSS ${v.cvss??'—'} · EPSS ${percent(v.epss)}`)),
       cell('Packages',el('span',{class:'mono'},(v.packages||[]).join(', '))),
-      cell('Systems',el('strong',{},v.systems),v.pods===undefined?null:el('small',{},[v.hosts?`${v.hosts} hosts`:null,v.pods?`${v.pods} pods`:null,v.containers?`${v.containers} containers`:null].filter(Boolean).join(' · '))),
-      cell('Fix',v.fixable?el('span',{class:'status ready'},'available'):el('span',{class:'status'},'none yet'))));
+      cell('Systems',el('strong',{},v.systems),v.pods===undefined?null:el('small',{},[v.hosts?`${v.hosts} hosts`:null,v.pods?`${v.pods} pods`:null,v.containers?`${v.containers} containers`:null,v.not_applicable_findings?`${v.not_applicable_findings} not applicable`:null].filter(Boolean).join(' · '))),
+      cell('Fix',v.not_applicable?el('span',{class:'status ready'},'not applicable'):v.fixable?el('span',{class:'status ready'},'available'):el('span',{class:'status'},'none yet'))));
     const search=list.querySelector('input');const caret=search&&search.selectionStart;
     list.replaceChildren(
       el('div',{class:'section-head'},el('div',{},el('h2',{},'Vulnerabilities'),el('p',{},`${shown.length} of ${vulns.length} match the filters. Highest risk first. Open one to see the affected systems.`))),
@@ -167,11 +171,11 @@ function findingsTable(findings,{showVia=true}={}){
     const search=wrap.querySelector('input');const caret=search&&search.selectionStart;
     wrap.replaceChildren(filters(render),
       shown.length?el('div',{class:'table vuln-findings'},el('div',{class:'tr th'},el('span',{},'Vulnerability'),el('span',{},'Severity'),el('span',{},'Package'),el('span',{},'Fixed in'),el('span',{},'Found in')),
-        ...shown.slice(0,state.limit).map(f=>el('div',{class:'tr'},
-          cell('Vulnerability',vulnLink(f.id),el('small',{},`risk ${f.risk?f.risk.toFixed(1):'—'} · CVSS ${f.cvss??'—'}`)),
-          cell('Severity',badge(f.severity),kevBadge(f.kev)),
+        ...shown.slice(0,state.limit).map(f=>el('div',{class:`tr${isNotApplicable(f)?' vuln-disposed':''}`},
+          cell('Vulnerability',vulnLink(f.id),el('small',{},`risk ${f.risk?f.risk.toFixed(1):'—'} · CVSS ${f.cvss??'—'}`),isNotApplicable(f)?el('small',{class:'vuln-disposition-reason'},f.disposition.reason):null),
+          cell('Severity',badge(f.severity),kevBadge(f.kev),dispositionBadge(f)),
           cell('Package',el('span',{class:'mono'},f.package),el('small',{class:'mono'},f.version)),
-          cell('Fixed in',f.fixed_in&&f.fixed_in.length?el('span',{class:'mono'},f.fixed_in.join(', ')):el('span',{class:'muted'},f.fix_state==='wont-fix'?'will not be fixed':'no fix yet')),
+          cell('Fixed in',isNotApplicable(f)?el('span',{class:'status ready'},'not applicable'):f.fixed_in&&f.fixed_in.length?el('span',{class:'mono'},f.fixed_in.join(', ')):el('span',{class:'muted'},f.fix_state==='wont-fix'?'will not be fixed':'no fix yet')),
           cell('Found in',showVia?foundIn(f):'image'))))
       :el('div',{class:'empty'},'No findings match these filters.'),
       more(Math.min(state.limit,shown.length),shown.length,()=>{state.limit+=PAGE;render()}));
@@ -229,7 +233,7 @@ function system(data){
     heading,
     el('p',{class:'muted'},'Last scan ',when(data.scanned_at),data.status==='ok'?null:el('span',{class:'vuln-error'},` · last attempt failed: ${data.error||data.status}`)),
     el('section',{class:'metrics vuln-metrics'},
-      el('article',{},el('span',{},'Vulnerabilities'),el('strong',{},data.counts.total),el('small',{},`${data.counts.fixable} with a fix`)),
+      el('article',{},el('span',{},'Vulnerabilities'),el('strong',{},data.counts.total),el('small',{},`${data.counts.fixable} with a fix · ${data.counts.not_applicable||0} not applicable`)),
       el('article',{},el('span',{},'Critical / High'),el('strong',{},`${data.counts.critical} / ${data.counts.high}`)),
       el('article',{class:data.counts.kev?'vuln-alert':''},el('span',{},'Known exploited'),el('strong',{},data.counts.kev)),
       el('article',{},el('span',{},'Software'),el('strong',{},data.packages),el('small',{},workload?`in ${data.images} container images`:'packages'))),
@@ -247,11 +251,13 @@ function vulnerability(data){
   const affected=data.affected||[];
   const hostRows=affected.filter(row=>!isWorkload(row.system_kind)),podRows=affected.filter(row=>isWorkload(row.system_kind));
   const distinct=rows=>new Set(rows.map(row=>row.system)).size;
-  const fixedIn=row=>row.fixed_in&&row.fixed_in.length?el('span',{class:'mono'},row.fixed_in.join(', ')):el('span',{class:'muted'},'no fix yet');
+  const disposed=affected.filter(isNotApplicable),allDisposed=affected.length>0&&disposed.length===affected.length;
+  const fixedIn=row=>isNotApplicable(row)?el('span',{},el('span',{class:'status ready'},'not applicable'),el('small',{class:'vuln-disposition-reason'},row.disposition.reason)):row.fixed_in&&row.fixed_in.length?el('span',{class:'mono'},row.fixed_in.join(', ')):el('span',{class:'muted'},'no fix yet');
   podRows.sort((a,b)=>(a.cluster||'').localeCompare(b.cluster||'')||(a.namespace||'').localeCompare(b.namespace||'')||a.system_name.localeCompare(b.system_name)||(a.container||'').localeCompare(b.container||''));
   root.replaceChildren(
     el('p',{class:'vuln-back'},el('a',{href:'/security/vulnerabilities'},'← All vulnerabilities')),
-    el('section',{class:'section-head'},el('div',{},el('h2',{class:'mono'},data.id),data.aliases&&data.aliases.length?el('p',{class:'mono'},data.aliases.join(' · ')):null)),
+    el('section',{class:'section-head'},el('div',{},el('h2',{class:'mono'},data.id),data.aliases&&data.aliases.length?el('p',{class:'mono'},data.aliases.join(' · ')):null,allDisposed?el('p',{},el('span',{class:'vuln-disposition'},'Not applicable')):null)),
+    disposed.length?el('section',{class:'panel vuln-disposition-panel'},el('strong',{},allDisposed?'Reviewed as not applicable':'Some affected workloads are not applicable'),el('p',{},Array.from(new Set(disposed.map(row=>row.disposition.reason))).join(' ')),el('small',{},'The scanner match remains visible for auditability but is excluded from active risk totals.')):null,
     el('section',{class:'metrics vuln-metrics'},
       el('article',{},el('span',{},'Severity'),el('strong',{},data.severity)),
       el('article',{},el('span',{},'Risk / CVSS'),el('strong',{},`${data.risk?data.risk.toFixed(1):'—'} / ${data.cvss??'—'}`)),
@@ -263,7 +269,7 @@ function vulnerability(data){
       urls.length?el('ul',{class:'vuln-links'},...urls.map(url=>el('li',{},el('a',{href:url,rel:'noopener noreferrer',target:'_blank'},url)))):null),
     hostRows.length?anchor('vuln-affected-hosts',el('div',{class:'section-head'},el('div',{},el('h2',{},'Affected hosts and VMs'),el('p',{},`${distinct(hostRows)} systems, in their installed software`))),
       el('div',{class:'table vuln-affected'},el('div',{class:'tr th'},el('span',{},'System'),el('span',{},'Package'),el('span',{},'Fixed in'),el('span',{},'Found in')),
-        ...hostRows.map(row=>el('div',{class:'tr'},
+        ...hostRows.map(row=>el('div',{class:`tr${isNotApplicable(row)?' vuln-disposed':''}`},
           cell('System',systemLink(row.system,row.system_name)),
           cell('Package',el('span',{class:'mono'},row.package),el('small',{class:'mono'},row.version)),
           cell('Fixed in',fixedIn(row)),
@@ -271,7 +277,7 @@ function vulnerability(data){
     podRows.length?anchor('vuln-affected-pods',el('div',{class:'section-head'},el('div',{},el('h2',{},'Affected pods and containers'),
         el('p',{},`${distinct(podRows)} workloads, in their container images. A pod can run on any node of its cluster, so fix it by updating the image, not the node.`))),
       el('div',{class:'table vuln-affected vuln-affected-pods'},el('div',{class:'tr th'},el('span',{},'Workload'),el('span',{},'Namespace · cluster'),el('span',{},'Package'),el('span',{},'Fixed in'),el('span',{},'Container and image')),
-        ...podRows.map(row=>el('div',{class:'tr'},
+        ...podRows.map(row=>el('div',{class:`tr${isNotApplicable(row)?' vuln-disposed':''}`},
           cell('Workload',el('span',{},kindTag(row.system_kind),' ',systemLink(row.system,row.system_name))),
           cell('Namespace · cluster',row.system_kind==='pod'?el('span',{class:'mono'},row.namespace):el('span',{class:'muted'},'—'),el('small',{},row.system_kind==='pod'?`cluster ${row.cluster} · any node`:'Docker on atlantis')),
           cell('Package',el('span',{class:'mono'},row.package),el('small',{class:'mono'},row.version)),

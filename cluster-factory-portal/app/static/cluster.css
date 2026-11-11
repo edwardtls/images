@@ -87,6 +87,11 @@
 .vuln-severity.medium{background:var(--orange);color:var(--ink)}
 .vuln-severity.low{background:#f3dc8c;color:var(--ink)}
 .vuln-kev{display:inline-flex;margin-left:6px;padding:3px 8px;border-radius:20px;background:var(--ink);color:#fff;font:700 10px ui-monospace,monospace;text-transform:uppercase}
+.vuln-disposition{display:inline-flex;margin:3px 0 0 6px;padding:3px 8px;border-radius:20px;background:#cceade;color:#145d4d;font:700 10px ui-monospace,monospace;text-transform:uppercase}
+.vuln-disposition-reason{display:block;margin-top:4px;color:#145d4d!important;overflow-wrap:anywhere}
+.vuln-disposition-panel{border-left:5px solid #2d806b;background:#edf8f4;margin-bottom:20px}
+.vuln-disposition-panel p{margin:8px 0}.vuln-disposition-panel small{color:var(--muted)}
+.vuln-disposed{background:#f1f7f4!important}.vuln-disposed .vuln-severity{opacity:.65}
 .vuln-counts{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}
 .vuln-counts b{min-width:30px;padding:3px 6px;border-radius:4px;text-align:center;font:700 12px ui-monospace,monospace;color:#fff}
 .vuln-counts b.critical{background:#7a1f1f}.vuln-counts b.high{background:var(--red)}
