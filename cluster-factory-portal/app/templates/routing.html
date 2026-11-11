@@ -1,5 +1,7 @@
 {% extends "base.html" %}{% block title %}Routing · Factory{% endblock %}{% block content %}
-{% macro traffic(item) %}<span class="routing-bytes"><b>{{ (item.up + item.down)|filesizeformat }}</b><small>↑ {{ item.up|filesizeformat }} · ↓ {{ item.down|filesizeformat }}</small></span>{% endmacro %}
+{% macro traffic(item) %}<span class="routing-bytes"><b>{{ (item.up + item.down)|filesizeformat }}</b><small>↑ {{ item.up|filesizeformat }}</small><small>↓ {{ item.down|filesizeformat }}</small></span>{% endmacro %}
+{% macro usage_row(label, item, when='') %}<div class="routing-usage-row"><span class="routing-usage-label">{{ label }}{% if when %}<small>{{ when }}</small>{% endif %}</span>{% if item %}<b>{{ (item.up + item.down)|filesizeformat }}</b><span>↑ {{ item.up|filesizeformat }}</span><span>↓ {{ item.down|filesizeformat }}</span>{% else %}<b>—</b><span></span><span></span>{% endif %}</div>{% endmacro %}
+{% macro span(item) %}{% set start = item.started_at or '' %}{% set end = item.ended_at or '' %}{{ start[11:] }}–{{ end[11:] if end else 'now' }}{% if end and end[:10] != start[:10] %} ({{ start[5:10] }} → {{ end[5:10] }}){% endif %}{% endmacro %}
 <section class="page-head"><div><div class="eyebrow">Home network egress</div><h1>Device routing</h1><p>Choose which devices reach the internet through Atlantis (KPN, Netherlands) or through vpnwifi-gw and Asguard (United States). DNS follows the same path.</p></div></section>
 {% set path = state.path %}
 {% if error %}<section class="warning"><strong>Routing state unavailable.</strong><span>{{ error }}</span></section>
@@ -10,11 +12,11 @@
 <section class="routing-devices">
 {% for device in state.devices %}<article class="routing-device{{ ' is-us' if device.route == 'us' else '' }}">
   <div class="routing-device-head"><div><h2>{{ device.name }}</h2><p>{{ device.network }} · <span class="mono">{{ device.addresses|join(', ') or 'no address seen' }}</span></p></div><span class="status {{ 'ready' if device.online else '' }}">{{ 'online' if device.online else 'not seen' }}</span></div>
-  {% set usage = device.usage %}{% if usage and (device.route == 'us' or usage.total.up + usage.total.down > 0) %}<dl class="routing-usage">
-    <div><dt>{% if usage.session %}This session <small>since {{ usage.session.started_at }}</small>{% else %}Last session{% if usage.last_session %} <small>{{ usage.last_session.started_at }} – {{ usage.last_session.ended_at }}</small>{% endif %}{% endif %}</dt><dd>{% if usage.session %}{{ traffic(usage.session) }}{% elif usage.last_session %}{{ traffic(usage.last_session) }}{% else %}—{% endif %}</dd></div>
-    <div><dt>This month</dt><dd>{{ traffic(usage.month) }}</dd></div>
-    <div><dt>Total</dt><dd>{{ traffic(usage.total) }}</dd></div>
-  </dl>{% endif %}
+  {% set usage = device.usage %}{% if usage and (device.route == 'us' or usage.total.up + usage.total.down > 0) %}<div class="routing-usage" aria-label="US path data for {{ device.name }}">
+    {% if usage.session %}{{ usage_row('This session', usage.session, span(usage.session)) }}{% elif usage.last_session %}{{ usage_row('Last session', usage.last_session, span(usage.last_session)) }}{% endif %}
+    {{ usage_row('This month', usage.month) }}
+    {{ usage_row('Total', usage.total) }}
+  </div>{% endif %}
   <form method="post" action="/routing/{{ device.id }}" class="routing-switch" data-confirm="Route {{ device.name }} via {{ 'Atlantis (KPN)' if device.route == 'us' else 'the US (Asguard)' }}? Its open connections will be reset.">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <fieldset><legend class="visually-hidden">Internet route for {{ device.name }}</legend>

@@ -61,12 +61,13 @@ class DeviceRoutingTests(unittest.TestCase):
         self.assertIn("US path ready", page)
         self.assertIn('class="routing-device is-us"', page)
         self.assertIn("US path this month (2026-11)", page)
-        self.assertIn("since 2026-11-11 12:05", page)
+        self.assertIn("This session<small>12:05–now</small>", page)
         self.assertIn("251.5 MB", page)   # session up + down
         self.assertIn("753.0 MB", page)   # month
         self.assertIn("4.0 GB", page)     # total
         # A device that never used the US path shows no counters.
         self.assertEqual(page.count('class="routing-usage"'), 1)
+        self.assertEqual(page.count('class="routing-usage-row"'), 3)
 
     def test_unavailable_state_is_reported(self):
         self._login([ADMIN_GROUP])
