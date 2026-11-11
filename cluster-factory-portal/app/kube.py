@@ -108,7 +108,7 @@ def openshift_request_error(control_planes: int, workers: int, storage: str, ttl
     return None
 
 
-def rancher_request_error(control_planes: int, workers: int) -> str | None:
+def rke2_request_error(control_planes: int, workers: int) -> str | None:
     if control_planes not in {1, 3, 5} or workers not in {3, 4, 5, 6}:
         return "Rancher/RKE2 requires 1, 3 or 5 control planes and 3 to 6 workers"
     return None

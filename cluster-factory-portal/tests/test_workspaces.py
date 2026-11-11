@@ -13,7 +13,7 @@ from app.security import ADMIN_GROUP
 BASE = "https://factory.apps.d00s.org"
 PROFILES = {"k8s": {"domain": "k8s.d00s.org"},
             "ocp": {"domain": "ocp.d00s.org", "platform": "openshift", "admin_only": True},
-            "rancher": {"domain": "rancher.d00s.org", "platform": "rancher"}}
+            "rke2": {"domain": "rke2.d00s.org", "platform": "rke2"}}
 VERSIONS = {"kubernetes": [{"value": "1.37.0", "tested": True}],
             "openshift": [{"value": "4.20.1", "tested": True}],
             "rke2": [{"value": "v1.36.6+rke2r1", "tested": False}],
@@ -63,8 +63,8 @@ class WorkspaceTests(unittest.TestCase):
         page = self.client.get("/build", base_url=BASE).get_data(as_text=True)
         self.assertIn('data-platform="openshift">OCP · OpenShift · ocp.d00s.org</option>', page)
         self.assertIn('data-platform="kubernetes">K8S · Vanilla Kubernetes · k8s.d00s.org</option>', page)
-        self.assertIn('data-platform="rancher">RANCHER · Rancher / RKE2 · rancher.d00s.org</option>', page)
-        self.assertIn("Rancher uses RKE2 plus Rancher Manager", page)
+        self.assertIn('data-platform="rke2">RKE2 · Rancher / RKE2 · rke2.d00s.org</option>', page)
+        self.assertIn("RKE2 uses Rancher Kubernetes Engine plus Rancher Manager", page)
 
     def test_users_without_cluster_access_get_only_how_it_works(self):
         self.login(access={"approved": True, "clusters": False, "security": False})

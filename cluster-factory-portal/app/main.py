@@ -368,7 +368,7 @@ def build():
     if profile_config.get("admin_only") and not is_admin(user):
         abort(403, "This profile is limited to administrators")
     openshift = profile_config.get("platform") == "openshift"
-    rancher = profile_config.get("platform") == "rancher"
+    rancher = profile_config.get("platform") == "rke2"
     owned = [record for record in kube.cluster_records() if record.get("owner_sub") == user["sub"]]
     pending = [job for job in kube.active_jobs()
                if job["metadata"]["labels"].get("factory.d00s.org/owner") == owner_id(user)]
@@ -404,7 +404,7 @@ def build():
         selected_versions.pop("rke2", None)
         selected_versions.pop("rancher_chart", None)
     elif rancher:
-        error = kube.rancher_request_error(control_planes, workers)
+        error = kube.rke2_request_error(control_planes, workers)
         if error:
             abort(400, error)
         selected_versions.pop("openshift", None)

@@ -204,12 +204,12 @@ if(securityContent){
   const update=()=>{
     const platform=select.selectedOptions[0]?.dataset.platform||'kubernetes';
     const openshift=platform==='openshift';
-    const rancher=platform==='rancher';
+    const rancher=platform==='rke2';
     // Nothing is disabled: the server validates every version field for both platforms.
     form.querySelectorAll('[data-openshift-only]').forEach(item=>{item.hidden=!openshift});
     form.querySelectorAll('[data-rancher-only]').forEach(item=>{item.hidden=!rancher});
     const logo=form.querySelector('[data-platform-logo]');
-    if(logo)logo.src=`/static/platform-${platform}.svg`;
+    if(logo)logo.src=`/static/platform-${rancher?'rancher':platform}.svg`;
     form.querySelectorAll('input[name="workers"]').forEach(input=>{
       const unavailable=rancher&&Number(input.value)<3;
       input.disabled=unavailable;
