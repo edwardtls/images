@@ -1,6 +1,7 @@
 import os
 import re
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("OIDC_ISSUER", "https://kc.example.test/realms/d00s")
@@ -78,6 +79,8 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn('data-addon="monitoring"', page)
         self.assertIn("OpenShift GitOps and cluster monitoring are built in", page)
         self.assertIn("RKE2 supplies Kubernetes and Metrics Server", page)
+        css = (Path(__file__).parents[1] / "app/static/cluster.css").read_text(encoding="utf-8")
+        self.assertIn(".build-form [hidden]{display:none!important}", css)
 
     def test_users_without_cluster_access_get_only_how_it_works(self):
         self.login(access={"approved": True, "clusters": False, "security": False})
