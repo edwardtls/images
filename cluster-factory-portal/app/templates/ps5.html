@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}PS5 Network · Factory{% endblock %}{% block content %}
+<section class="page-head"><div><div class="eyebrow">Home network observability</div><h1>PS5 network report</h1><p>Daily classic DNS activity and NTP routing for the monitored console.</p></div></section>
+<form class="report-picker" method="get" action="/ps5">
+  <label for="report-date">Report date<input id="report-date" type="date" name="date" value="{{ selected if selected != 'latest' else today }}" max="{{ today }}" required></label>
+  <button>Show report</button>
+  <a class="secondary button" href="/ps5">Latest</a>
+</form>
+{% if error %}<div class="warning"><strong>Report unavailable</strong><span>{{ error }}</span></div>{% elif report %}
+<div class="report-meta"><span class="status active">Daily report</span><span class="mono">{{ report.date }}</span><span>Source: Atlantis DNS and NTP telemetry</span></div>
+<article class="doc-content ps5-report">{{ report.html }}</article>
+{% endif %}
+{% endblock %}
