@@ -613,24 +613,56 @@ def documentation_detail(document_id: str):
 @app.get("/ps5")
 def ps5_network_report():
     require_admin()
-    selected = request.args.get("date", "latest")
-    if selected != "latest" and not ps5_reports.REPORT_DATE.fullmatch(selected):
+    today_date = dt.datetime.now(dt.timezone.utc).astimezone(ZoneInfo("Europe/Amsterdam")).date()
+    window = [today_date - dt.timedelta(days=offset) for offset in range(8)]
+    allowed = {day.isoformat() for day in window}
+    requested = request.args.get("date", "latest")
+    if requested != "latest" and requested not in allowed:
         abort(400, "Invalid PS5 report date")
-    today = dt.datetime.now(dt.timezone.utc).astimezone(ZoneInfo("Europe/Amsterdam")).date().isoformat()
     try:
+        available = set(ps5_reports.available()) & allowed
+        selected = (next((day.isoformat() for day in window if day.isoformat() in available),
+                         today_date.isoformat()) if requested == "latest" else requested)
+        reports = [{"date": day.isoformat(),
+                    "label": "Today" if day == today_date else
+                             "Yesterday" if day == today_date - dt.timedelta(days=1) else
+                             day.strftime("%A"),
+                    "available": day.isoformat() in available,
+                    "selected": day.isoformat() == selected}
+                   for day in window]
         report = ps5_reports.report(selected)
     except ValueError:
         abort(400, "Invalid PS5 report date")
     except ps5_reports.NotFound:
         return page("ps5.html", report=None, selected=selected,
-                    today=today, error="No report exists for that date"), 404
+                    reports=reports, generated=request.args.get("generated") == "1",
+                    error="No report exists for that date. Run it now to create one."), 404
     except (OSError, RuntimeError, json.JSONDecodeError, subprocess.SubprocessError):
         app.logger.warning("PS5 network report unavailable", exc_info=True)
-        return page("ps5.html", report=None, selected=selected,
-                    today=today,
+        return page("ps5.html", report=None, selected=requested,
+                    reports=[], generated=False,
                     error="The PS5 report is temporarily unavailable"), 503
     return page("ps5.html", report=report, selected=report["date"],
-                today=today, error=None)
+                reports=reports, generated=request.args.get("generated") == "1", error=None)
+
+
+@app.post("/ps5/generate")
+def ps5_generate_report():
+    require_admin(); values = form(); verify_csrf(values.get("csrf", ""))
+    today = dt.datetime.now(dt.timezone.utc).astimezone(ZoneInfo("Europe/Amsterdam")).date()
+    allowed = {(today - dt.timedelta(days=offset)).isoformat() for offset in range(8)}
+    report_date = values.get("date", "")
+    if report_date not in allowed:
+        abort(400, "Invalid PS5 report date")
+    try:
+        ps5_reports.generate(report_date)
+    except ValueError:
+        abort(400, "Invalid PS5 report date")
+    except (OSError, RuntimeError, json.JSONDecodeError, subprocess.SubprocessError):
+        app.logger.warning("PS5 network report generation failed", exc_info=True)
+        abort(502, "The PS5 report could not be generated")
+    app.logger.info("administrator generated PS5 network report for %s", report_date)
+    return redirect("/ps5?date=" + urllib.parse.quote(report_date) + "&generated=1", code=303)
 
 
 SECURITY_WINDOWS = (("3h", "Last 3 hours"), ("today", "Today"), ("24h", "Last 24 hours"),

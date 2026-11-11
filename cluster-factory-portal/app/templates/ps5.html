@@ -1,10 +1,15 @@
 {% extends "base.html" %}{% block title %}PS5 Network · Factory{% endblock %}{% block content %}
 <section class="page-head"><div><div class="eyebrow">Home network observability</div><h1>PS5 network report</h1><p>Daily classic DNS activity and NTP routing for the monitored console.</p></div></section>
-<form class="report-picker" method="get" action="/ps5">
-  <label for="report-date">Report date<input id="report-date" type="date" name="date" value="{{ selected if selected != 'latest' else today }}" max="{{ today }}" required></label>
-  <button>Show report</button>
-  <a class="secondary button" href="/ps5">Latest</a>
-</form>
+<section class="report-index" aria-labelledby="report-index-title">
+  <div class="section-head"><div><h2 id="report-index-title">Today and the last 7 days</h2><p>The 04:00 Amsterdam run creates the previous day's final report. Run any day again on demand.</p></div></div>
+  <div class="report-days">
+  {% for item in reports %}<article class="report-day{% if item.selected %} selected{% endif %}">
+    <a href="/ps5?date={{ item.date }}"><strong>{{ item.label }}</strong><span class="mono">{{ item.date }}</span><span class="status {{ 'ready' if item.available else '' }}">{{ 'Available' if item.available else 'Not run' }}</span></a>
+    <form method="post" action="/ps5/generate"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="date" value="{{ item.date }}"><button class="secondary compact">{{ 'Re-run' if item.available else 'Run now' }}</button></form>
+  </article>{% endfor %}
+  </div>
+</section>
+{% if generated %}<div class="success"><strong>Report generated</strong><span>The report below now includes the latest gateway logs.</span></div>{% endif %}
 {% if error %}<div class="warning"><strong>Report unavailable</strong><span>{{ error }}</span></div>{% elif report %}
 <div class="report-meta"><span class="status active">Daily report</span><span class="mono">{{ report.date }}</span><span>Source: Atlantis DNS and NTP telemetry</span></div>
 <article class="doc-content ps5-report">{{ report.html }}</article>
