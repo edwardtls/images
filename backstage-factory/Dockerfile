@@ -9,7 +9,8 @@ RUN find packages \! -name package.json -mindepth 2 -maxdepth 2 -exec rm -rf {} 
 FROM node:24-trixie-slim AS build
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev python3 make g++ && \
+    apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends libsqlite3-dev python3 make g++ && \
     rm -rf /var/lib/apt/lists/*
 USER node
 WORKDIR /app
@@ -27,7 +28,8 @@ RUN mkdir packages/backend/dist/skeleton packages/backend/dist/bundle && \
 FROM node:24-trixie-slim AS production-deps
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev python3 make g++ && \
+    apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends libsqlite3-dev python3 make g++ && \
     rm -rf /var/lib/apt/lists/*
 USER node
 WORKDIR /app
@@ -41,18 +43,19 @@ RUN --mount=type=cache,target=/home/node/.cache/yarn,sharing=locked,uid=1000,gid
 FROM node:24-trixie-slim
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends libsqlite3-0 && \
+    apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends libsqlite3-0 && \
     rm -rf /var/lib/apt/lists/*
 USER node
 WORKDIR /app
-COPY --from=build --chown=node:node /app/.yarn ./.yarn
-COPY --from=build --chown=node:node /app/.yarnrc.yml ./
 COPY --from=build --chown=node:node /app/backstage.json ./
-COPY --from=build --chown=node:node /app/yarn.lock /app/package.json /app/packages/backend/dist/skeleton/ ./
+COPY --from=build --chown=node:node /app/package.json /app/packages/backend/dist/skeleton/ ./
 COPY --from=production-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/packages/backend/dist/bundle/ ./
 COPY --chown=node:node app-config*.yaml ./
 COPY --chown=node:node examples ./examples
+RUN rm -f /app/yarn.lock && \
+    find /app/packages/app/dist -type f -name '*.map' -delete
 ENV NODE_ENV=production
 EXPOSE 7007
 CMD ["node", "packages/backend", "--config", "app-config.yaml", "--config", "app-config.production.yaml"]
