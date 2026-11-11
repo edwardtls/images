@@ -113,3 +113,8 @@
 .vuln-jump a:hover{border-color:var(--ink)}
 .vuln-jump b{font:700 11px ui-monospace,monospace;color:var(--muted)}
 .vuln-anchor{scroll-margin-top:64px}
+.routing-path{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-left:5px solid #287a68;border-radius:7px;padding:16px 20px;margin-bottom:22px}.routing-path.down{border-left-color:var(--red);background:#fbeeee}
+.routing-devices{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}.routing-device{background:#fff;border:1px solid var(--line);border-radius:7px;padding:20px;display:grid;gap:16px;min-width:0}.routing-device.is-us{border-top:5px solid var(--orange)}
+.routing-device-head{display:flex;justify-content:space-between;align-items:start;gap:12px}.routing-device-head h2{font-size:22px;margin:0 0 2px}.routing-device-head p{margin:0;color:var(--muted);font-size:13px}
+.routing-switch fieldset{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:6px;padding:3px;margin:0;background:#eef0ec}.routing-switch button{border-radius:4px;min-height:44px}.routing-switch button.secondary{background:transparent}.routing-switch button.selected{background:var(--ink);color:#fff;cursor:default}.routing-device.is-us .routing-switch button.selected{background:#a8521d}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

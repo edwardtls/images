@@ -25,7 +25,7 @@ from flask import (Flask, Response, abort, redirect, render_template, request,
                    session, stream_with_context)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import (ai_control, documentation, edge_security, kube, ps5_reports,
+from . import (ai_control, device_egress, documentation, edge_security, kube, ps5_reports,
                security_store, vulnerabilities)
 from .lifecycle import lifecycle_history
 from .security import (can_manage_clusters, can_view_security, client_ip,
@@ -790,6 +790,35 @@ def security_delete(address: str):
         abort(502, "The distributed firewall did not accept the removal")
     app.logger.info("administrator removed distributed edge ban for %s", normalized)
     return redirect("/security?removed=" + urllib.parse.quote(normalized), code=303)
+
+
+@app.get("/routing")
+def device_routing():
+    require_admin()
+    try:
+        state, error = device_egress.status(), None
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+        app.logger.warning("device routing status unavailable", exc_info=True)
+        state, error = {"devices": [], "path": {}}, "Atlantis did not return the device routing state"
+    changed = request.args.get("changed", "")
+    changed_device = next((item for item in state["devices"] if item.get("id") == changed), None)
+    return page("routing.html", state=state, error=error, changed=changed_device), (503 if error else 200)
+
+
+@app.post("/routing/<device_id>")
+def device_routing_switch(device_id: str):
+    require_admin(); values = form(); verify_csrf(values.get("csrf", ""))
+    if values.get("route") not in {"us", "atlantis"}:
+        abort(400, "Invalid route")
+    try:
+        device_egress.switch(device_id, values["route"] == "us")
+    except ValueError:
+        abort(400, "Invalid device")
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        app.logger.warning("device routing switch failed", exc_info=True)
+        abort(502, "Atlantis did not accept the routing change")
+    app.logger.info("administrator routed %s via %s", device_id, values["route"])
+    return redirect("/routing?changed=" + urllib.parse.quote(device_id), code=303)
 
 
 @app.post("/contact")

@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}Routing · Factory{% endblock %}{% block content %}
+<section class="page-head"><div><div class="eyebrow">Home network egress</div><h1>Device routing</h1><p>Choose which devices reach the internet through Atlantis (KPN, Netherlands) or through vpnwifi-gw and Asguard (United States). DNS follows the same path.</p></div></section>
+{% set path = state.path %}
+{% if error %}<section class="warning"><strong>Routing state unavailable.</strong><span>{{ error }}</span></section>
+{% else %}
+<section class="routing-path {{ 'ready' if path.ready else 'down' }}"><span class="status {{ 'ready' if path.ready else '' }}">{{ 'US path ready' if path.ready else 'US path down' }}</span><span>{% if path.ready %}vpnwifi-gw ({{ path.gateway }}) is reachable; switched devices exit through Asguard in the US.{% else %}Switched devices are cut off, not sent over KPN, until vpnwifi-gw is reachable again.{% endif %}</span></section>
+{% if changed %}<div class="success"><strong>{{ changed.name }} now routes via {{ 'the US' if changed.route == 'us' else 'Atlantis' }}</strong><span>Existing connections were reset. Restart the app (or the device) if it does not reconnect by itself.</span></div>{% endif %}
+<section class="routing-devices">
+{% for device in state.devices %}<article class="routing-device{{ ' is-us' if device.route == 'us' else '' }}">
+  <div class="routing-device-head"><div><h2>{{ device.name }}</h2><p>{{ device.network }} · <span class="mono">{{ device.addresses|join(', ') or 'no address seen' }}</span></p></div><span class="status {{ 'ready' if device.online else '' }}">{{ 'online' if device.online else 'not seen' }}</span></div>
+  <form method="post" action="/routing/{{ device.id }}" class="routing-switch" data-confirm="Route {{ device.name }} via {{ 'Atlantis (KPN)' if device.route == 'us' else 'the US (Asguard)' }}? Its open connections will be reset.">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <fieldset><legend class="visually-hidden">Internet route for {{ device.name }}</legend>
+      <button name="route" value="atlantis" class="{{ 'selected' if device.route == 'atlantis' else 'secondary' }}"{% if device.route == 'atlantis' %} aria-pressed="true" disabled{% else %} aria-pressed="false"{% endif %}>Atlantis · NL</button>
+      <button name="route" value="us" class="{{ 'selected' if device.route == 'us' else 'secondary' }}"{% if device.route == 'us' %} aria-pressed="true" disabled{% else %} aria-pressed="false"{% endif %}>Asguard · US</button>
+    </fieldset>
+  </form>
+</article>{% else %}<div class="empty">No switchable devices are configured on Atlantis.</div>{% endfor %}
+</section>
+<p class="note">A device on the US path can only reach the internet through vpnwifi-gw: if that path fails it loses internet access rather than falling back to KPN. It keeps local network access (AirPlay, HomeKit, casting) but cannot use services on Atlantis itself. IPv6 is blocked for it. The device list is maintained in <span class="mono">ansible/00-atlantis/device-egress.yml</span>.</p>
+{% endif %}
+{% endblock %}
