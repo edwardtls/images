@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% from "_subtabs.html" import subtabs, pane %}
+{% set current = tabs|selectattr('id', 'equalto', active)|first %}
+{% block title %}{{ current.label }} · Factory{% endblock %}{% block content %}
+<section class="page-head"><div><div class="eyebrow">Administrator</div><h1>Home network</h1><p>Internet routing for household devices and the PS5 network report.</p></div></section>
+{{ subtabs("Home network sections", tabs, active) }}
+{% call pane('routing', active) %}{% include "_routing.html" %}{% endcall %}
+{% call pane('ps5', active) %}{% include "_ps5.html" %}{% endcall %}
+{% endblock %}

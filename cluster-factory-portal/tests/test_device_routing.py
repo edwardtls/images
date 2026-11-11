@@ -32,6 +32,13 @@ STATE = {
 class DeviceRoutingTests(unittest.TestCase):
     def setUp(self):
         self.client = app.test_client()
+        # Device routing shares its page with the PS5 report; keep that pane offline.
+        for target, value in (("app.main.ps5_reports.available", []),
+                              ("app.main.ps5_reports.report", {"date": "2026-11-11", "html": ""}),
+                              ("app.main.device_egress_store.history", None)):
+            patcher = patch(target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def _login(self, groups):
         with self.client.session_transaction(base_url=BASE) as session:

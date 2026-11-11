@@ -18,6 +18,12 @@ MARKDOWN = "# PS5 network report — 2026-11-10\n\n| Count | Name |\n| ---: | --
 
 class Ps5ReportTests(unittest.TestCase):
     def setUp(self):
+        # The PS5 report shares its page with Device routing; keep that pane offline.
+        for target, value in (("app.main.device_egress.status", {"devices": [], "path": {}}),
+                              ("app.main.device_egress_store.history", None)):
+            patcher = patch(target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.client = app.test_client()
 
     def _login(self, groups):
@@ -39,7 +45,8 @@ class Ps5ReportTests(unittest.TestCase):
             response = self.client.get("/ps5", base_url=BASE)
         page = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn('href="/ps5">PS5 Network</a>', page)
+        self.assertIn('<a href="/routing" class="active" aria-current="page">Home network</a>', page)
+        self.assertIn('id="tab-ps5" aria-controls="pane-ps5" aria-selected="true"', page)
         self.assertIn("example.test", page)
         self.assertEqual(page.count('<article class="report-day'), 8)
         self.assertIn("Today and the last 7 days", page)
