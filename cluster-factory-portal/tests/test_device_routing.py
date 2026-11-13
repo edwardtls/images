@@ -25,6 +25,17 @@ STATE = {
                    "last_session": None}},
     ],
     "path": {"gateway": "192.168.86.1", "ready": True},
+    "exits": [
+        {"id": "us", "country": "US", "endpoint": "Asguard", "active": True,
+         "available": True, "metered": True, "used": 27000000000, "limit": 2000000000000,
+         "percent": 1.35, "warning": False, "blocked": False},
+        {"id": "de", "country": "DE", "endpoint": "Zion", "active": True,
+         "available": True, "metered": False, "used": 10000000000, "limit": None,
+         "percent": None, "warning": False, "blocked": False},
+        {"id": "nl", "country": "NL", "endpoint": "Zulu", "active": True,
+         "available": True, "metered": True, "used": 280000000, "limit": 20000000000000,
+         "percent": 0.0, "warning": False, "blocked": False},
+    ],
     "month": "2026-11", "month_usage": {"up": 3000000, "down": 750000000},
 }
 
@@ -69,7 +80,10 @@ class DeviceRoutingTests(unittest.TestCase):
         self.assertIn('class="routing-device is-us"', page)
         self.assertIn("At 23:00 Europe/Amsterdam", page)
         self.assertIn("automatically returned to Atlantis/KPN", page)
-        self.assertIn("US path this month (2026-11)", page)
+        self.assertIn("Asguard", page)
+        self.assertIn("Zion", page)
+        self.assertIn("Zulu", page)
+        self.assertIn("automatic cutoff at 95%", page)
         self.assertIn("This session<small>12:05–now</small>", page)
         self.assertIn("251.5 MB", page)   # session up + down
         self.assertIn("753.0 MB", page)   # month
