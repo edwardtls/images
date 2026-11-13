@@ -44,7 +44,7 @@ auth:
   providers:
     oidc:
       production:
-        metadataUrl: https://kc.apps.d00s.org/realms/d00s/.well-known/openid-configuration
+        metadataUrl: https://kc.apps.d00s.org/realms/d00s-internal/.well-known/openid-configuration
         clientId: ${AUTH_OIDC_CLIENT_ID}
         clientSecret: ${AUTH_OIDC_CLIENT_SECRET}
         additionalScopes: [groups]
