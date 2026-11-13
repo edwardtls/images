@@ -19,6 +19,15 @@ manifest to promote a build; no mutable `latest` tag is deployed.
 Retired images are kept under [`archive/`](archive/README.md) and are not
 built.
 
+## Forgejo security derivative
+
+`forgejo-security/` retains the pinned upstream rootless Forgejo application
+and updates security-fixed Alpine runtime packages that have not yet reached
+an upstream Forgejo image. It is rebuilt weekly and promoted only by immutable
+Harbor tag and digest. See
+[`forgejo-security/README.md`](forgejo-security/README.md) for its deliberately
+narrow scope and the vulnerabilities that still require an upstream rebuild.
+
 ## Refoss/Tasmota power exporter
 
 `refoss-exporter/` builds `harbor.apps.d00s.org/d00s/refoss-exporter`. One
