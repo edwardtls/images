@@ -80,6 +80,39 @@ class Ps5ReportTests(unittest.TestCase):
         self.assertEqual(old.status_code, 400)
         generate.assert_not_called()
 
+    def test_pane_endpoint_renders_only_the_report_pane(self):
+        self._login([ADMIN_GROUP])
+        with patch("app.main.ps5_reports.available", return_value=["2026-11-10"]), \
+             patch("app.main.ps5_reports.report", return_value={
+                 "date": "2026-11-10", "html": ps5_reports.documentation.render_markdown(MARKDOWN)}), \
+             patch("app.main.device_egress.status") as routing:
+            response = self.client.get("/api/ps5/pane?date=latest", base_url=BASE)
+        pane = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("example.test", pane)
+        self.assertIn("data-ps5-day=", pane)
+        self.assertIn("data-ps5-run", pane)
+        self.assertIn('name="csrf" value="test-token"', pane)
+        self.assertNotIn("<html", pane)
+        routing.assert_not_called()  # changing the day never queries the gateways
+
+    def test_pane_endpoint_is_administrator_only_and_validates_date(self):
+        self._login([])
+        with patch("app.security.kube.access_record",
+                   return_value={"approved": True, "clusters": True, "security": True}):
+            self.assertEqual(self.client.get("/api/ps5/pane", base_url=BASE).status_code, 403)
+        self._login([ADMIN_GROUP])
+        with patch("app.main.ps5_reports.report") as report:
+            self.assertEqual(self.client.get("/api/ps5/pane?date=../x", base_url=BASE).status_code, 400)
+        report.assert_not_called()
+
+    def test_every_page_has_a_back_to_top_button(self):
+        self._login([ADMIN_GROUP])
+        with patch("app.main.ps5_reports.available", return_value=[]), \
+             patch("app.main.ps5_reports.report", side_effect=ps5_reports.NotFound()):
+            page = self.client.get("/ps5", base_url=BASE).get_data(as_text=True)
+        self.assertIn('class="to-top" data-to-top hidden aria-label="Back to top"', page)
+
     @patch("app.ps5_reports.subprocess.run")
     def test_report_uses_forced_command_and_escapes_html(self, run):
         run.return_value = MagicMock(stdout=json.dumps({

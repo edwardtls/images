@@ -307,3 +307,84 @@ if(securityContent){
   metrics?.addEventListener('change',()=>updateVersions(selectedPlatform()));
   const initial=selectedPlatform();if(initial)choose(initial);else update('');
 })();
+
+// PS5 report days and runs load into the pane in place. The links and forms
+// still work without JavaScript; any unexpected response falls back to them.
+(()=>{
+  const pane=document.getElementById('pane-ps5');if(!pane)return;
+  // Each "### domain" heading and its table become one foldable group. This
+  // only moves the server-rendered nodes; folding never reloads anything.
+  const fold=()=>{
+    const report=pane.querySelector('.ps5-report');if(!report||report.dataset.folded)return;
+    report.dataset.folded='true';
+    const groups=[];
+    report.querySelectorAll('h3').forEach(heading=>{
+      const table=heading.nextElementSibling;if(!table||table.tagName!=='TABLE')return;
+      const details=document.createElement('details'),summary=document.createElement('summary');
+      details.className='dns-group';
+      while(heading.firstChild)summary.appendChild(heading.firstChild);
+      heading.replaceWith(details);details.append(summary,table);groups.push(details);
+    });
+    if(groups.length<2)return;
+    const actions=document.createElement('div');actions.className='dns-group-actions';
+    for(const [label,open] of [['Expand all',true],['Collapse all',false]]){
+      const button=document.createElement('button');button.type='button';button.className='secondary compact';
+      button.textContent=label;button.addEventListener('click',()=>groups.forEach(group=>{group.open=open}));
+      actions.append(button);
+    }
+    groups[0].before(actions);
+  };
+  fold();
+  const urlDate=()=>location.pathname==='/ps5'?(new URLSearchParams(location.search).get('date')||'latest'):'latest';
+  pane.dataset.date=urlDate();
+  const load=async(date,{push=true,generated=false}={})=>{
+    const query=new URLSearchParams({date});if(generated)query.set('generated','1');
+    pane.setAttribute('aria-busy','true');
+    try{
+      const response=await fetch('/api/ps5/pane?'+query,{headers:{Accept:'text/html'},cache:'no-store'});
+      // A redirect means the session expired; 400/403 mean the page itself must explain.
+      if(response.redirected||![200,404,503].includes(response.status))return false;
+      pane.innerHTML=await response.text();pane.dataset.date=date;fold();
+      const path='/ps5?date='+encodeURIComponent(date);
+      if(push&&location.pathname+location.search!==path)history.pushState({ps5:date},'',path);
+      return true;
+    }catch(_error){return false}
+    finally{pane.removeAttribute('aria-busy')}
+  };
+  document.addEventListener('click',event=>{
+    const link=event.target.closest('#pane-ps5 a[data-ps5-day]');
+    if(!link||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    load(link.dataset.ps5Day).then(ok=>{if(!ok)location.href=link.href});
+  });
+  document.addEventListener('submit',async event=>{
+    const form=event.target.closest('#pane-ps5 form[data-ps5-run]');if(!form||event.defaultPrevented)return;
+    event.preventDefault();
+    const button=form.querySelector('button'),label=button.textContent,date=form.elements.date.value;
+    button.disabled=true;button.textContent='Running…';
+    try{
+      // The server answers success with a 303 to the report; do not follow it.
+      const response=await fetch(form.action,{method:'POST',body:new URLSearchParams(new FormData(form)),redirect:'manual'});
+      if(response.type!=='opaqueredirect')throw new Error(String(response.status));
+      if(!(await load(date,{generated:true})))location.href='/ps5?date='+encodeURIComponent(date);
+    }catch(_error){
+      button.disabled=false;button.textContent=label;
+      if(!form.querySelector('.ps5-run-error'))form.insertAdjacentHTML('beforeend','<span class="ps5-run-error" role="alert">Run failed, try again</span>');
+    }
+  });
+  window.addEventListener('popstate',()=>{if(location.pathname==='/ps5'&&urlDate()!==pane.dataset.date)load(urlDate(),{push:false})});
+})();
+
+// Back to top: shown once the page has scrolled well past the first screen.
+(()=>{
+  const button=document.querySelector('[data-to-top]');if(!button)return;
+  let queued=false;
+  const update=()=>{queued=false;button.hidden=window.scrollY<Math.max(600,window.innerHeight)};
+  window.addEventListener('scroll',()=>{if(!queued){queued=true;requestAnimationFrame(update)}},{passive:true});
+  update();
+  button.addEventListener('click',()=>{
+    const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({top:0,behavior:reduce?'auto':'smooth'});
+    const target=document.querySelector('.brand');if(target)target.focus({preventScroll:true});
+  });
+})();

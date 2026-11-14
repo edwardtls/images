@@ -723,6 +723,14 @@ def ps5_network_report():
     return network_workspace("ps5")
 
 
+@app.get("/api/ps5/pane")
+def ps5_pane():
+    """Only the PS5 pane, so changing the report day does not reload the page."""
+    require_admin()
+    ps5, status = ps5_context(request.args.get("date", "latest"))
+    return render_template("_ps5.html", csrf=csrf_token(), **ps5), status
+
+
 @app.post("/ps5/generate")
 def ps5_generate_report():
     require_admin(); values = form(); verify_csrf(values.get("csrf", ""))
