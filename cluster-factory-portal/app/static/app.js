@@ -312,6 +312,29 @@ if(securityContent){
 // still work without JavaScript; any unexpected response falls back to them.
 (()=>{
   const pane=document.getElementById('pane-ps5');if(!pane)return;
+  // Each "### domain" heading and its table become one foldable group. This
+  // only moves the server-rendered nodes; folding never reloads anything.
+  const fold=()=>{
+    const report=pane.querySelector('.ps5-report');if(!report||report.dataset.folded)return;
+    report.dataset.folded='true';
+    const groups=[];
+    report.querySelectorAll('h3').forEach(heading=>{
+      const table=heading.nextElementSibling;if(!table||table.tagName!=='TABLE')return;
+      const details=document.createElement('details'),summary=document.createElement('summary');
+      details.className='dns-group';
+      while(heading.firstChild)summary.appendChild(heading.firstChild);
+      heading.replaceWith(details);details.append(summary,table);groups.push(details);
+    });
+    if(groups.length<2)return;
+    const actions=document.createElement('div');actions.className='dns-group-actions';
+    for(const [label,open] of [['Expand all',true],['Collapse all',false]]){
+      const button=document.createElement('button');button.type='button';button.className='secondary compact';
+      button.textContent=label;button.addEventListener('click',()=>groups.forEach(group=>{group.open=open}));
+      actions.append(button);
+    }
+    groups[0].before(actions);
+  };
+  fold();
   const urlDate=()=>location.pathname==='/ps5'?(new URLSearchParams(location.search).get('date')||'latest'):'latest';
   pane.dataset.date=urlDate();
   const load=async(date,{push=true,generated=false}={})=>{
@@ -321,7 +344,7 @@ if(securityContent){
       const response=await fetch('/api/ps5/pane?'+query,{headers:{Accept:'text/html'},cache:'no-store'});
       // A redirect means the session expired; 400/403 mean the page itself must explain.
       if(response.redirected||![200,404,503].includes(response.status))return false;
-      pane.innerHTML=await response.text();pane.dataset.date=date;
+      pane.innerHTML=await response.text();pane.dataset.date=date;fold();
       const path='/ps5?date='+encodeURIComponent(date);
       if(push&&location.pathname+location.search!==path)history.pushState({ps5:date},'',path);
       return true;
