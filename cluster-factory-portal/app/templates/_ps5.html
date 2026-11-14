@@ -3,8 +3,8 @@
   <div class="section-head"><div><h2 id="report-index-title">Today and the last 7 days</h2><p>The 04:00 Amsterdam run creates the previous day's final report. Run any day again on demand.</p></div></div>
   <div class="report-days">
   {% for item in reports %}<article class="report-day{% if item.selected %} selected{% endif %}">
-    <a href="/ps5?date={{ item.date }}"><strong>{{ item.label }}</strong><span class="mono">{{ item.date }}</span><span class="status {{ 'ready' if item.available else '' }}">{{ 'Available' if item.available else 'Not run' }}</span></a>
-    <form method="post" action="/ps5/generate"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="date" value="{{ item.date }}"><button class="secondary compact">{{ 'Re-run' if item.available else 'Run now' }}</button></form>
+    <a href="/ps5?date={{ item.date }}" data-ps5-day="{{ item.date }}"{% if item.selected %} aria-current="true"{% endif %}><strong>{{ item.label }}</strong><span class="mono">{{ item.date }}</span><span class="status {{ 'ready' if item.available else '' }}">{{ 'Available' if item.available else 'Not run' }}</span></a>
+    <form method="post" action="/ps5/generate" data-ps5-run><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="date" value="{{ item.date }}"><button class="secondary compact">{{ 'Re-run' if item.available else 'Run now' }}</button></form>
   </article>{% endfor %}
   </div>
 </section>

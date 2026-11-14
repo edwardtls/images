@@ -136,3 +136,6 @@
 .build-form [hidden]{display:none!important}
 @media(max-width:900px){.platform-choices{grid-template-columns:1fr}}
 @media(max-width:700px){.build-form{margin-inline:-10px;padding:10px}.build-details{gap:14px}.platform-choice-body{min-height:0;grid-template-columns:44px minmax(0,1fr);padding:16px}.platform-choice-body>img{width:44px;height:44px}.platform-hero{grid-template-columns:auto 1fr;gap:12px;padding:16px}.platform-hero>img{width:48px;height:48px}.platform-badge{grid-column:1/-1;justify-self:start}}
+.country-code{display:inline-block;vertical-align:middle;margin-left:6px;padding:1px 7px;border-radius:5px;background:var(--ink);color:#fff;font:800 12px/1.5 ui-monospace,monospace;letter-spacing:.08em}
+.to-top{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));z-index:20;width:46px;height:46px;padding:0;border-radius:50%;border:0;background:var(--ink);color:#fff;font-size:20px;line-height:1;box-shadow:0 6px 18px rgba(7,22,34,.28);cursor:pointer}.to-top:hover{background:var(--navy)}.to-top:focus-visible{outline:3px solid var(--mint);outline-offset:2px}.to-top[hidden]{display:none}
+#pane-ps5[aria-busy="true"]{opacity:.55;transition:opacity .15s}.ps5-run-error{color:var(--red);font-size:12px}

@@ -83,6 +83,9 @@ class DeviceRoutingTests(unittest.TestCase):
         self.assertIn("Asguard", page)
         self.assertIn("Zion", page)
         self.assertIn("Zulu", page)
+        self.assertIn('Asguard <span class="country-code" title="United States">US</span>', page)
+        self.assertIn('Zion <span class="country-code" title="Germany">DE</span>', page)
+        self.assertIn('Zulu <span class="country-code" title="Netherlands">NL</span>', page)
         self.assertIn("automatic cutoff at 95%", page)
         self.assertIn("This session<small>12:05–now</small>", page)
         self.assertIn("251.5 MB", page)   # session up + down
