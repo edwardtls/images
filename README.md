@@ -5,10 +5,10 @@ cluster.
 
 ## Builds
 
-Kubernetes manifests use an immutable image tag and digest. GitHub Actions
-builds every image on relevant pushes, every Sunday, and on manual dispatch.
-Each job runs on an ephemeral Kubernetes runner and pushes directly to Harbor.
-The runner scales back to zero when the job is complete.
+Kubernetes manifests use an immutable image tag and digest. Forgejo Actions in
+the private `infra/images` repository builds every image on relevant pushes,
+every Sunday, and on manual dispatch. Jobs run on the isolated
+`forgejo-build` Kubernetes runner and push directly to Harbor.
 
 Builds use rootless BuildKit without a privileged Docker daemon. They publish
 an immutable date, Git commit, and run-number tag together with SBOM and SLSA
@@ -47,9 +47,9 @@ by the replicated Kubernetes directory. The image is published to the
 internal Harbor project as `harbor.apps.d00s.org/d00s/openldap` and Kubernetes
 pins its immutable digest.
 
-The workflow has no `pull_request` trigger because this repository is public
-and a self-hosted runner must not execute untrusted fork code. Only trusted
-pushes to `main`, schedules, and manual dispatches can start it.
+The workflow has no untrusted-fork execution path. Only reviewed changes in the
+private Forgejo repository, trusted pushes to `main`, schedules, and manual
+dispatches can use the internal runner and Harbor push credential.
 
 See [`openldap/README.md`](openldap/README.md) for build details.
 
