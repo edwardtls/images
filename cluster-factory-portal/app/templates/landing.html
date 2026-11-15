@@ -1,3 +1,4 @@
 {% extends "base.html" %}{% block title %}d00s Cluster Factory{% endblock %}{% block content %}
+{% if expired %}<div class="warning session-expired" role="status"><strong>Your session has ended.</strong><span>Sign in again to continue.</span></div>{% endif %}
 <section class="hero"><div class="eyebrow">Disposable Kubernetes, deliberately controlled</div><h1>Build a clean cluster.<br><em>Leave no debris.</em></h1><p>Choose a tested platform profile, watch every Ansible stage, and let the factory retire it automatically when its work is done.</p><div class="hero-actions"><a class="button" href="/login">Sign in</a><a class="secondary button" href="/signup">Request access</a></div><p class="note">New accounts remain pending until an administrator approves them and grants individual Factory capabilities.</p><div class="trust"><span>OIDC protected</span><span>Approval required</span><span>Audited operations</span></div></section>
 {% endblock %}

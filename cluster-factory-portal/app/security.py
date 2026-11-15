@@ -4,11 +4,17 @@ import ipaddress
 import os
 import secrets
 from flask import abort, request, session
+from werkzeug.exceptions import Unauthorized
 
 from . import kube
 
 
 ADMIN_GROUP = os.getenv("OIDC_ADMIN_GROUP", "factory-admins")
+
+
+class SessionExpired(Unauthorized):
+    """No signed-in session: expired, signed out, or never signed in."""
+    description = "Authentication required"
 
 
 def groups(user: dict) -> set[str]:
@@ -18,7 +24,7 @@ def groups(user: dict) -> set[str]:
 def current_user() -> dict:
     user = session.get("user")
     if not user:
-        abort(401, "Authentication required")
+        raise SessionExpired()
     if is_admin(user):
         return user
     access = kube.access_record(str(user.get("sub") or ""))
