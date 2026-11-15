@@ -28,7 +28,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from . import (ai_control, device_egress, device_egress_store, documentation, edge_security, kube, ps5_reports,
                security_store, vulnerabilities)
 from .lifecycle import lifecycle_history
-from .security import (can_manage_clusters, can_view_security, client_ip,
+from .security import (SessionExpired, can_manage_clusters, can_view_security, client_ip,
                        csrf_token, current_user, groups, is_admin, owner_id,
                        require_admin, require_clusters, require_security,
                        verify_csrf)
@@ -205,6 +205,23 @@ def reconciler():
 threading.Thread(target=reconciler, name="factory-reconciler", daemon=True).start()
 
 
+@app.errorhandler(SessionExpired)
+def session_expired(error):
+    """Send browsers back to the main page instead of a bare 401.
+
+    Page loads and form posts are redirected to the landing page, which offers
+    sign-in. Background requests (fetch) keep the 401 and carry a header so the
+    page script can do the same redirect.
+    """
+    background = (request.path.startswith("/api/")
+                  or request.headers.get("Sec-Fetch-Mode", "navigate") != "navigate")
+    if background:
+        response = Response("Authentication required", status=401, mimetype="text/plain")
+        response.headers["X-Factory-Session"] = "expired"
+        return response
+    return redirect("/?expired=1", code=303)
+
+
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
@@ -214,7 +231,7 @@ def healthz():
 def landing():
     if session.get("user"):
         return redirect("/dashboard", code=303)
-    return page("landing.html")
+    return page("landing.html", expired=request.args.get("expired") == "1")
 
 
 def oidc_redirect(*, registration: bool = False):

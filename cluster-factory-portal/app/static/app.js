@@ -1,3 +1,13 @@
+// An expired session answers background requests with 401 and this header;
+// go to the main page (sign-in) instead of leaving a half-broken screen.
+(()=>{
+  const nativeFetch=window.fetch.bind(window);
+  window.fetch=async(...args)=>{
+    const response=await nativeFetch(...args);
+    if(response.status===401&&response.headers.get('X-Factory-Session')==='expired')location.assign('/?expired=1');
+    return response;
+  };
+})();
 document.querySelectorAll('[data-dialog]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.dialog).showModal()));
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));
 document.addEventListener('submit',e=>{const f=e.target.closest('[data-confirm]');if(f&&!confirm(f.dataset.confirm))e.preventDefault()});
