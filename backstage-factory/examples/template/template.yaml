@@ -32,7 +32,7 @@ spec:
           ui:field: RepoUrlPicker
           ui:options:
             allowedHosts:
-              - github.com
+              - git.apps.d00s.org
 
   # These steps are executed in the scaffolder backend, using data that we gathered
   # via the parameters above.
@@ -46,12 +46,12 @@ spec:
         values:
           name: ${{ parameters.name }}
 
-    # This step publishes the contents of the working directory to GitHub.
+    # This step publishes the contents of the working directory to Forgejo.
     # If you or your organization prefer another default branch name over 'main'
     # you can change that here.
     - id: publish
       name: Publish
-      action: publish:github
+      action: publish:gitea
       input:
         description: This is ${{ parameters.name }}
         repoUrl: ${{ parameters.repoUrl }}
