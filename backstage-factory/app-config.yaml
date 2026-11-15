@@ -28,15 +28,15 @@ app:
             - url: https://git.apps.d00s.org
               label: Internal Forgejo
               icon: kind:component
-            - url: https://github.com/backstage/backstage/blob/master/CONTRIBUTING.md
-              label: Contributing
+            - url: https://git.apps.d00s.org/infra/images/src/branch/main/backstage-factory
+              label: Backstage source
               icon: docs
             - url: https://backstage.io/plugins
               label: Plugins Directory
               icon: kind:component
-            - url: https://github.com/backstage/backstage/issues/new/choose
-              label: Submit New Issue
-              icon: github
+            - url: https://git.apps.d00s.org/infra/images/issues/new
+              label: Submit internal issue
+              icon: kind:component
     - home-page-widget:home/world-clock:
         config:
           clockConfigs:

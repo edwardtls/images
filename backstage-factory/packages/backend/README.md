@@ -48,12 +48,12 @@ We chose [Passport](http://www.passportjs.org/) as authentication platform due
 to its comprehensive set of supported authentication
 [strategies](http://www.passportjs.org/packages/).
 
-Read more about the
-[auth-backend](https://github.com/backstage/backstage/blob/master/plugins/auth-backend/README.md)
-and
-[how to add a new provider](https://github.com/backstage/backstage/blob/master/docs/auth/add-auth-provider.md)
+Read more in the upstream
+[Backstage authentication documentation](https://backstage.io/docs/auth/)
+and the
+[guide for adding an authentication provider](https://backstage.io/docs/auth/add-auth-provider/).
 
 ## Documentation
 
-- [Backstage Readme](https://github.com/backstage/backstage/blob/master/README.md)
+- [D00S Backstage source](https://git.apps.d00s.org/infra/images/src/branch/main/backstage-factory)
 - [Backstage Documentation](https://backstage.io/docs)

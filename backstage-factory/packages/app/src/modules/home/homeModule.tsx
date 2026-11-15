@@ -22,7 +22,8 @@ software, services, and documentation.
 - [Backstage Documentation](https://backstage.io/docs)
 - [Customizing Your Homepage](https://backstage.io/docs/getting-started/homepage)
 - [Adding Plugins](https://backstage.io/docs/plugins)
-- [Contributing](https://github.com/backstage/backstage/blob/master/CONTRIBUTING.md)
+- [D00S Backstage source](https://git.apps.d00s.org/infra/images/src/branch/main/backstage-factory)
+- [Submit an internal issue](https://git.apps.d00s.org/infra/images/issues/new)
 
 ### How to Edit This Card
 
