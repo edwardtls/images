@@ -17,42 +17,26 @@ cnpg_backup="forgejo-${backup_id,,}"
 work=/work/${backup_id}
 archive=${work}/forgejo-data.tar.zst
 manifest=${work}/manifest.json
-original_replicas="$(kubectl -n "$namespace" get deployment "$deployment" -o jsonpath='{.spec.replicas}')"
+original_replicas="$(python3 /opt/forgejo-backup/kube.py replicas "$namespace" "$deployment")"
 resumed=false
 
 mkdir -p "$work"
 
 resume_forgejo() {
   if [[ "$resumed" == false ]]; then
-    kubectl -n "$namespace" scale deployment "$deployment" --replicas="$original_replicas" >/dev/null || true
-    kubectl -n "$namespace" rollout status deployment "$deployment" --timeout=5m || true
+    python3 /opt/forgejo-backup/kube.py scale "$namespace" "$deployment" "$original_replicas" || true
+    python3 /opt/forgejo-backup/kube.py wait-ready "$namespace" "$deployment" "$original_replicas" 300 || true
     resumed=true
   fi
 }
 trap resume_forgejo EXIT
 
 echo "Quiescing Forgejo (${original_replicas} replicas) for backup ${backup_id}"
-kubectl -n "$namespace" scale deployment "$deployment" --replicas=0 >/dev/null
-kubectl -n "$namespace" wait --for=delete pod -l app.kubernetes.io/name=forgejo --timeout=5m
+python3 /opt/forgejo-backup/kube.py scale "$namespace" "$deployment" 0
+python3 /opt/forgejo-backup/kube.py wait-no-pods "$namespace" app.kubernetes.io/name=forgejo 300
 quiesced_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-cat <<EOF | kubectl apply -f - >/dev/null
-apiVersion: postgresql.cnpg.io/v1
-kind: Backup
-metadata:
-  name: ${cnpg_backup}
-  namespace: ${db_namespace}
-  labels:
-    backup.d00s.org/application: forgejo
-    backup.d00s.org/backup-id: ${backup_id}
-spec:
-  cluster:
-    name: ${db_cluster}
-  method: plugin
-  target: prefer-standby
-  pluginConfiguration:
-    name: barman-cloud.cloudnative-pg.io
-EOF
+python3 /opt/forgejo-backup/kube.py create-backup "$db_namespace" "$cnpg_backup" "$db_cluster" "$backup_id"
 
 echo "Archiving the quiesced repository volume"
 tar --numeric-owner --xattrs --acls \
@@ -65,15 +49,15 @@ trap - EXIT
 
 echo "Waiting for CNPG backup ${cnpg_backup}"
 for _ in $(seq 1 180); do
-  phase="$(kubectl -n "$db_namespace" get backup "$cnpg_backup" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  phase="$(python3 /opt/forgejo-backup/kube.py backup-field "$db_namespace" "$cnpg_backup" phase 2>/dev/null || true)"
   [[ "$phase" == completed ]] && break
   [[ "$phase" == failed ]] && { echo "CNPG backup failed" >&2; exit 1; }
   sleep 10
 done
 [[ "${phase:-}" == completed ]] || { echo "CNPG backup timed out" >&2; exit 1; }
 
-cnpg_started="$(kubectl -n "$db_namespace" get backup "$cnpg_backup" -o jsonpath='{.status.startedAt}')"
-cnpg_stopped="$(kubectl -n "$db_namespace" get backup "$cnpg_backup" -o jsonpath='{.status.stoppedAt}')"
+cnpg_started="$(python3 /opt/forgejo-backup/kube.py backup-field "$db_namespace" "$cnpg_backup" startedAt)"
+cnpg_stopped="$(python3 /opt/forgejo-backup/kube.py backup-field "$db_namespace" "$cnpg_backup" stoppedAt)"
 archive_size="$(stat -c %s "$archive")"
 jq -n \
   --arg backup_id "$backup_id" --arg created_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
