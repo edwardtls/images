@@ -10,6 +10,8 @@ RUN apk upgrade --no-cache && \
     /opt/forgejo-backup/venv/bin/pip install --no-cache-dir --require-hashes \
       -r /opt/forgejo-backup/requirements.txt && \
     /opt/forgejo-backup/venv/bin/pip check && \
+    /opt/forgejo-backup/venv/bin/pip uninstall --yes pip && \
+    apk del py3-pip py3-setuptools && \
     rm -rf /root/.cache
 
 COPY backup.sh restore-check.sh kube.py s3.py /opt/forgejo-backup/
