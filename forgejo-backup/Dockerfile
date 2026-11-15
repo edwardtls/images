@@ -1,6 +1,6 @@
 FROM alpine:3.22.2
 
-LABEL org.opencontainers.image.source="https://github.com/edwardtls/images"
+LABEL org.opencontainers.image.source="https://git.apps.d00s.org/infra/images"
 LABEL org.opencontainers.image.description="Forgejo repository and coordinated CNPG backup client"
 
 COPY requirements.txt /opt/forgejo-backup/requirements.txt

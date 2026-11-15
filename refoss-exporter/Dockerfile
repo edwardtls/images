@@ -6,7 +6,7 @@ LABEL org.opencontainers.image.title="d00s Refoss/Tasmota exporter" \
       org.opencontainers.image.description="Fixed-inventory Prometheus exporter for Tasmota power outlets" \
       org.opencontainers.image.created="$BUILD_DATE" \
       org.opencontainers.image.revision="$VCS_REF" \
-      org.opencontainers.image.source="https://github.com/edwardtls/images/tree/main/refoss-exporter"
+      org.opencontainers.image.source="https://git.apps.d00s.org/infra/images/tree/main/refoss-exporter"
 
 RUN apk upgrade --no-cache \
     && addgroup -S -g 65532 nonroot \

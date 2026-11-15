@@ -1,0 +1,131 @@
+name: Build custom images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .forgejo/workflows/build-images.yaml
+      - openldap/**
+      - cluster-factory-portal/**
+      - backstage-factory/**
+      - mcp-honeypot/**
+      - refoss-exporter/**
+      - forgejo-security/**
+      - forgejo-backup/**
+      - forgejo-runner/**
+  schedule:
+    - cron: "17 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: custom-images-${{ github.ref }}
+  # A runner pod can disappear after GitHub has assigned a matrix job. In
+  # that case the run remains queued indefinitely and blocks every newer
+  # image revision. Images are immutable and only the newest revision is
+  # useful, so let a new run supersede the stale one.
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # This is deliberately not triggered by pull_request. The repository is
+    # public and this runner has a short-lived mount of a Harbor push token.
+    runs-on: forgejo-build
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          # Keep small operational utility images first. Their promotion may
+          # unblock backup/recovery work while larger application builds run.
+          - name: forgejo-backup
+            context: forgejo-backup
+            dockerfile: Dockerfile
+            version: 1.0.0
+            image: harbor.apps.d00s.org/d00s/forgejo-backup
+          - name: forgejo-runner
+            context: forgejo-runner
+            dockerfile: Dockerfile
+            version: 13.2.1
+            image: harbor.apps.d00s.org/d00s/forgejo-runner
+          - name: cluster-factory-portal
+            context: cluster-factory-portal
+            dockerfile: Dockerfile
+            version: 1.0.0
+            image: harbor.apps.d00s.org/d00s/cluster-factory-portal
+          - name: openldap
+            context: openldap
+            dockerfile: Dockerfile
+            version: 2.6.15
+            image: harbor.apps.d00s.org/d00s/openldap
+          - name: backstage-factory
+            context: backstage-factory
+            dockerfile: Dockerfile
+            version: 1.0.0
+            image: harbor.apps.d00s.org/d00s/backstage-factory
+          - name: mcp-honeypot
+            context: mcp-honeypot
+            dockerfile: Dockerfile
+            version: 1.0.0
+            image: harbor.apps.d00s.org/d00s/mcp-honeypot
+          - name: refoss-exporter
+            context: refoss-exporter
+            dockerfile: Dockerfile
+            version: 2.0.1
+            image: harbor.apps.d00s.org/d00s/refoss-exporter
+          - name: forgejo-security
+            context: forgejo-security
+            dockerfile: Dockerfile
+            version: 15.0.11
+            image: harbor.apps.d00s.org/d00s/forgejo
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build and push to Harbor
+        id: build
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+          VERSION: ${{ matrix.version }}
+          CONTEXT: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+        run: |
+          set -euo pipefail
+
+          short_sha="${GITHUB_SHA:0:12}"
+          build_date="$(date -u +%Y%m%d)"
+          tag="${VERSION}-${build_date}-${short_sha}-${GITHUB_RUN_NUMBER}"
+          metadata="${RUNNER_TEMP}/${{ matrix.name }}-metadata.json"
+
+          /opt/buildkit/bin/buildctl build \
+            --frontend dockerfile.v0 \
+            --local "context=${CONTEXT}" \
+            --local "dockerfile=${CONTEXT}" \
+            --opt "filename=${DOCKERFILE}" \
+            --opt platform=linux/amd64 \
+            --opt "build-arg:BUILD_DATE=${build_date}" \
+            --opt "build-arg:VCS_REF=${GITHUB_SHA}" \
+            --no-cache \
+            --opt attest:provenance=mode=max \
+            --opt attest:sbom= \
+            --metadata-file "${metadata}" \
+            --output "type=image,name=${IMAGE}:${tag},push=true,oci-mediatypes=true"
+
+          digest="$(jq -er '."containerimage.digest"' "${metadata}")"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### ${{ matrix.name }}"
+            echo
+            echo "\`${IMAGE}:${tag}@${digest}\`"
+            echo
+            echo "Harbor automatically queued a vulnerability scan after the push."
+          } >> "${GITHUB_STEP_SUMMARY}"

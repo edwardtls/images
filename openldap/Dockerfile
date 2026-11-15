@@ -49,7 +49,7 @@ FROM debian:13-slim
 
 ARG OPENLDAP_VERSION=2.6.15
 
-LABEL org.opencontainers.image.source="https://github.com/edwardtls/images"
+LABEL org.opencontainers.image.source="https://git.apps.d00s.org/infra/images"
 LABEL org.opencontainers.image.description="Minimal non-root OpenLDAP ${OPENLDAP_VERSION} LTS runtime"
 LABEL org.opencontainers.image.version="${OPENLDAP_VERSION}"
 

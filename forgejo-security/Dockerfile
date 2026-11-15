@@ -16,7 +16,7 @@ RUN apk upgrade --no-cache \
 
 LABEL org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${VCS_REF}" \
-      org.opencontainers.image.source="https://github.com/edwardtls/images" \
+      org.opencontainers.image.source="https://git.apps.d00s.org/infra/images" \
       org.opencontainers.image.title="Forgejo security-patched runtime"
 
 USER 1000:1000

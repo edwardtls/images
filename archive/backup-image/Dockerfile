@@ -1,6 +1,6 @@
 FROM postgres:18.6-alpine3.24
 
-LABEL org.opencontainers.image.source="https://github.com/edwardtls/images"
+LABEL org.opencontainers.image.source="https://git.apps.d00s.org/infra/images"
 LABEL org.opencontainers.image.description="PostgreSQL 18.6 backup client with Python and boto3"
 
 # Upgrade packages inherited from the PostgreSQL base before installing the
