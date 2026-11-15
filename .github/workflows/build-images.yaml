@@ -39,6 +39,13 @@ jobs:
       max-parallel: 1
       matrix:
         include:
+          # Keep small operational utility images first. Their promotion may
+          # unblock backup/recovery work while larger application builds run.
+          - name: forgejo-backup
+            context: forgejo-backup
+            dockerfile: Dockerfile
+            version: 1.0.0
+            image: harbor.apps.d00s.org/d00s/forgejo-backup
           - name: cluster-factory-portal
             context: cluster-factory-portal
             dockerfile: Dockerfile
@@ -69,11 +76,6 @@ jobs:
             dockerfile: Dockerfile
             version: 15.0.11
             image: harbor.apps.d00s.org/d00s/forgejo
-          - name: forgejo-backup
-            context: forgejo-backup
-            dockerfile: Dockerfile
-            version: 1.0.0
-            image: harbor.apps.d00s.org/d00s/forgejo-backup
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
