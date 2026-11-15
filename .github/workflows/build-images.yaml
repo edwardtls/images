@@ -12,6 +12,7 @@ on:
       - mcp-honeypot/**
       - refoss-exporter/**
       - forgejo-security/**
+      - forgejo-backup/**
   schedule:
     - cron: "17 3 * * 0"
   workflow_dispatch:
@@ -68,6 +69,11 @@ jobs:
             dockerfile: Dockerfile
             version: 15.0.11
             image: harbor.apps.d00s.org/d00s/forgejo
+          - name: forgejo-backup
+            context: forgejo-backup
+            dockerfile: Dockerfile
+            version: 1.0.0
+            image: harbor.apps.d00s.org/d00s/forgejo-backup
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
