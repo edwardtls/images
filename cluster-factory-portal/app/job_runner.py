@@ -28,9 +28,10 @@ def main() -> int:
            "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
            "-o", "UserKnownHostsFile=/ssh-config/known_hosts", "-o", "ConnectTimeout=15",
            "edward@192.168.31.254"]
-    if action not in {"create", "delete"}:
+    if action not in {"create", "delete", "ttl"}:
         raise ValueError("unsupported action")
-    stage("preflight-and-create" if action == "create" else "guarded-delete")
+    stage({"create": "preflight-and-create", "delete": "guarded-delete",
+           "ttl": "update-expiry"}[action])
     result = subprocess.run(ssh + [f"run {job_id} {action} {profile} {str(retain).lower()}"],
                             input=request, check=False)
     stage("complete" if result.returncode == 0 else "failed")

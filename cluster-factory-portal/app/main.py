@@ -376,6 +376,31 @@ def cluster_detail(profile: str):
     return page("cluster.html", cluster=record, live=live)
 
 
+@app.post("/clusters/<profile>/ttl")
+def update_cluster_ttl(profile: str):
+    user = require_clusters(); values = form(); verify_csrf(values.get("csrf", ""))
+    record = next((item for item in kube.cluster_records() if item["profile"] == profile), None)
+    if not record:
+        abort(404, "Cluster record not found")
+    if not is_admin(user) and record.get("owner_sub") != user["sub"]:
+        abort(403, "You do not own this cluster")
+    ttl = values.get("ttl", "")
+    if not kube.TTL_RE.fullmatch(ttl):
+        abort(400, "TTL must look like 24h, 7d, or 2w")
+    ttl_hours = int(ttl[:-1]) * {"h": 1, "d": 24, "w": 168}[ttl[-1]]
+    regular_max = str(kube.policy().get("max_ttl_regular", "7d"))
+    regular_max_hours = int(regular_max[:-1]) * {"h": 1, "d": 24, "w": 168}[regular_max[-1]]
+    if not is_admin(user) and ttl_hours > regular_max_hours:
+        abort(400, f"Regular-user TTL is limited to {regular_max}")
+    payload = json.loads(json.dumps(record["request"]))
+    payload["lifecycle"]["ttl"] = ttl
+    try:
+        job_id = kube.submit("ttl", payload, user, client_ip())
+    except ValueError as exc:
+        abort(409, str(exc))
+    return redirect(f"/jobs/{job_id}", code=303)
+
+
 @app.post("/build")
 def build():
     user = require_clusters(); values = form(); verify_csrf(values.get("csrf", ""))

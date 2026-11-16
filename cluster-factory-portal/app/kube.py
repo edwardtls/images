@@ -364,7 +364,9 @@ def dispatch_pending() -> None:
         if action == "delete" and running_deletion:
             continue
         try:
-            if not JOB_ID_RE.fullmatch(job_id) or action not in {"create", "delete"} or profile not in profiles():
+            if (not JOB_ID_RE.fullmatch(job_id)
+                    or action not in {"create", "delete", "ttl"}
+                    or profile not in profiles()):
                 raise ValueError("unsafe request metadata")
             document = yaml.safe_load(request_cm["data"]["request.yaml"])
             request_data = document["cluster_request"]
@@ -496,11 +498,13 @@ def reconcile() -> None:
                 delta = {"h": dt.timedelta(hours=amount), "d": dt.timedelta(days=amount),
                          "w": dt.timedelta(weeks=amount)}[unit]
                 profile_config = profiles()[profile]
-                test_url = profile_config["url"]
+                test_url = (f"https://test.apps.{profile_config['domain']}"
+                            if profile_config.get("platform") == "openshift"
+                            else profile_config["url"])
                 cluster = {"profile": profile, "owner_sub": record["owner_sub"], "owner": record["owner"],
                     "created_at": record["completed_at"],
                     "expires_at": (dt.datetime.now(dt.timezone.utc) + delta).isoformat(),
-                    "url": test_url, "test_url": test_url,
+                    "url": profile_config["url"], "test_url": test_url,
                     "argocd_url": profile_config.get("argocd_url", f"https://argo.apps.{profile_config['domain']}"),
                     **({} if profile_config.get("platform") == "openshift"
                        else {"forgejo_url": f"https://git.apps.d00s.org/factory/{profile}"}),
@@ -515,10 +519,24 @@ def reconcile() -> None:
                         api("PATCH", ns_path("configmaps", cluster_name), {"data": body["data"]},
                             content_type="application/merge-patch+json")
                     else: raise
-            else:
+            elif action == "delete":
                 try: api("DELETE", ns_path("configmaps", cluster_name), {"apiVersion": "v1", "kind": "DeleteOptions"})
                 except KubeError as exc:
                     if exc.status != 404: raise
+            else:
+                configmap = api("GET", ns_path("configmaps", cluster_name))
+                cluster = json.loads(configmap["data"]["record.json"])
+                ttl = record["request"]["lifecycle"]["ttl"]
+                amount, unit = int(ttl[:-1]), ttl[-1]
+                delta = {"h": dt.timedelta(hours=amount), "d": dt.timedelta(days=amount),
+                         "w": dt.timedelta(weeks=amount)}[unit]
+                cluster["request"]["lifecycle"]["ttl"] = ttl
+                cluster["expires_at"] = (
+                    dt.datetime.fromisoformat(record["completed_at"]).astimezone(dt.timezone.utc) + delta
+                ).isoformat()
+                api("PATCH", ns_path("configmaps", cluster_name),
+                    {"data": {"record.json": json.dumps(cluster, sort_keys=True)}},
+                    content_type="application/merge-patch+json")
         release_profile(profile); patch_audit(job_id, {"reconciled": True})
         try:
             api("DELETE", ns_path("configmaps", f"factory-request-{job_id}"),
