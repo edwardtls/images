@@ -82,7 +82,7 @@ jobs:
           - name: forgejo-security
             context: forgejo-security
             dockerfile: Dockerfile
-            version: 15.0.11
+            version: 15.0.12
             image: harbor.apps.d00s.org/d00s/forgejo
     steps:
       - name: Check out source from internal Forgejo
