@@ -1,4 +1,4 @@
-FROM code.forgejo.org/forgejo/forgejo:15.0.11-rootless@sha256:ab0b8fd8bfc55b6e0721347c0173c128c6431b3543ff2ab7a863929f1c5d2629
+FROM code.forgejo.org/forgejo/forgejo:15.0.12-rootless@sha256:b670d7724274e1d5c7801b76017b7267e6e5432aa4fe8bed49f781d09476b9dd
 
 ARG BUILD_DATE
 ARG VCS_REF
