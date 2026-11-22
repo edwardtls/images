@@ -52,7 +52,7 @@ jobs:
           - name: forgejo-runner
             context: forgejo-runner
             dockerfile: Dockerfile
-            version: 13.2.1
+            version: 13.2.2
             image: harbor.apps.d00s.org/d00s/forgejo-runner
           - name: cluster-factory-portal
             context: cluster-factory-portal
