@@ -1,4 +1,4 @@
-FROM python:3.13.18-alpine3.24@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca AS audit
+FROM python:3.15.2-alpine3.24@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd AS audit
 
 WORKDIR /audit
 COPY requirements.txt /audit/requirements.txt
@@ -7,7 +7,7 @@ RUN apk upgrade --no-cache \
     && pip-audit --requirement /audit/requirements.txt \
     && touch /audit/passed
 
-FROM python:3.13.18-alpine3.24@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca AS runtime
+FROM python:3.15.2-alpine3.24@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd AS runtime
 
 ARG VCS_REF=dev
 
